@@ -1,24 +1,38 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
-type ComplaintStatus =
-  | "SUBMITTED"
-  | "UNDER REVIEW"
-  | "IN PROGRESS"
-  | "RESOLVED"
-  | "OVERDUE";
+import { admin } from "@/lib/api/endpoints";
+import type { ComplaintStatus, ComplaintSummary } from "@/lib/api/types";
+import { adminStatusLabel, formatDate, initials } from "@/lib/format";
+import { useLoad, useSession } from "@/lib/session";
+
+type DisplayStatus = ComplaintStatus | "OVERDUE";
 
 type Complaint = {
+  key: string;
   id: string;
   student: string;
   hostel: string;
   category: string;
-  status: ComplaintStatus;
+  status: DisplayStatus;
   assignedTo: string;
   date: string;
 };
+
+function toRow(complaint: ComplaintSummary): Complaint {
+  return {
+    key: complaint.id,
+    id: complaint.complaintNumber,
+    student: complaint.student.fullName,
+    hostel: complaint.hostel?.name ?? "—",
+    category: complaint.category,
+    status: complaint.isOverdue ? "OVERDUE" : complaint.status,
+    assignedTo: complaint.assignedTo ?? "Unassigned",
+    date: formatDate(complaint.createdAt),
+  };
+}
 
 type RequirementStatus =
   | "REQUESTED"
@@ -36,100 +50,27 @@ type Requirement = {
   date: string;
 };
 
-const complaints: Complaint[] = [
-  {
-    id: "CMP-2026-0148",
-    student: "Arjun Singh",
-    hostel: "Gautam Buddha Hostel",
-    category: "Plumbing",
-    status: "IN PROGRESS",
-    assignedTo: "Rahul Kumar",
-    date: "02 Oct 2026",
-  },
-  {
-    id: "CMP-2026-0147",
-    student: "Aditya Verma",
-    hostel: "Ashoka Hostel",
-    category: "Electrical",
-    status: "UNDER REVIEW",
-    assignedTo: "Warden",
-    date: "02 Oct 2026",
-  },
-  {
-    id: "CMP-2026-0146",
-    student: "Vikas Kumar",
-    hostel: "Gautam Buddha Hostel",
-    category: "Maintenance",
-    status: "SUBMITTED",
-    assignedTo: "Unassigned",
-    date: "01 Oct 2026",
-  },
-  {
-    id: "CMP-2026-0142",
-    student: "Kunal Yadav",
-    hostel: "Ambedkar Hostel",
-    category: "Cleaning",
-    status: "OVERDUE",
-    assignedTo: "Hostel Staff",
-    date: "30 Sep 2026",
-  },
-  {
-    id: "CMP-2026-0139",
-    student: "Rohit Singh",
-    hostel: "Ashoka Hostel",
-    category: "Furniture",
-    status: "RESOLVED",
-    assignedTo: "Amit Kumar",
-    date: "29 Sep 2026",
-  },
-];
+// Requirement tickets are created by wardens and caretakers; that module is not connected yet,
+// so this list stays empty and the section shows an empty state.
+const requirements: Requirement[] = [];
 
-const requirements: Requirement[] = [
-  {
-    id: "REQ-2026-0042",
-    item: "LED Tube Lights",
-    hostel: "Gautam Buddha Hostel",
-    requestedBy: "Rahul Kumar",
-    quantity: 12,
-    status: "APPROVED",
-    date: "02 Oct 2026",
-  },
-  {
-    id: "REQ-2026-0041",
-    item: "Bathroom Taps",
-    hostel: "Ashoka Hostel",
-    requestedBy: "Sanjay Kumar",
-    quantity: 6,
-    status: "UNDER REVIEW",
-    date: "01 Oct 2026",
-  },
-  {
-    id: "REQ-2026-0038",
-    item: "Door Locks",
-    hostel: "Ambedkar Hostel",
-    requestedBy: "Vivek Sharma",
-    quantity: 5,
-    status: "REQUESTED",
-    date: "30 Sep 2026",
-  },
-  {
-    id: "REQ-2026-0034",
-    item: "PVC Water Pipe",
-    hostel: "Gautam Buddha Hostel",
-    requestedBy: "Rahul Kumar",
-    quantity: 20,
-    status: "FULFILLED",
-    date: "27 Sep 2026",
-  },
-];
-
-const statusStyles: Record<ComplaintStatus, string> = {
+const statusStyles: Record<DisplayStatus, string> = {
   SUBMITTED: "bg-blue-50 text-blue-700",
-  "UNDER REVIEW": "bg-amber-50 text-amber-700",
-  "IN PROGRESS": "bg-violet-50 text-violet-700",
+  UNDER_REVIEW: "bg-amber-50 text-amber-700",
+  ASSIGNED: "bg-violet-50 text-violet-700",
+  IN_PROGRESS: "bg-violet-50 text-violet-700",
+  WAITING_FOR_INFORMATION: "bg-slate-100 text-slate-600",
+  ESCALATED: "bg-rose-50 text-rose-700",
+  REOPENED: "bg-amber-50 text-amber-700",
   RESOLVED: "bg-emerald-50 text-emerald-700",
+  CLOSED: "bg-emerald-50 text-emerald-700",
+  REJECTED: "bg-slate-100 text-slate-600",
+  DUPLICATE: "bg-slate-100 text-slate-600",
   OVERDUE: "bg-rose-50 text-rose-700",
 };
+
+const statusText = (status: DisplayStatus) =>
+  status === "OVERDUE" ? "OVERDUE" : adminStatusLabel(status);
 
 const requirementStyles: Record<RequirementStatus, string> = {
   REQUESTED: "bg-blue-50 text-blue-700",
@@ -445,7 +386,7 @@ function AdminSidebar() {
   );
 }
 
-function TopBar() {
+function TopBar({ name, onSignOut }: { name: string | null; onSignOut: () => void }) {
   return (
     <header className="flex min-h-[76px] items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-7">
       <div>
@@ -460,7 +401,7 @@ function TopBar() {
       <div className="flex items-center gap-3">
         <div className="hidden text-right sm:block">
           <p className="text-sm font-semibold text-slate-800">
-            System Administrator
+            {name ?? " "}
           </p>
           <p className="text-xs text-slate-500">
             Gautam Buddha University
@@ -468,8 +409,16 @@ function TopBar() {
         </div>
 
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f8e9ef] text-sm font-bold text-[#8e123f]">
-          AD
+          {name ? initials(name) : ""}
         </div>
+
+        <button
+          type="button"
+          onClick={onSignOut}
+          className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-800"
+        >
+          Sign out
+        </button>
       </div>
     </header>
   );
@@ -510,41 +459,56 @@ function StatCard({
 }
 
 export default function AdminDashboardPage() {
+  const { user, signOut } = useSession("admin");
+  const ready = Boolean(user);
+
   const [search, setSearch] = useState("");
+  const [query, setQuery] = useState("");
 
-  const filteredComplaints = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    if (!query) {
-      return complaints;
-    }
-
-    return complaints.filter(
-      (complaint) =>
-        complaint.id.toLowerCase().includes(query) ||
-        complaint.student.toLowerCase().includes(query) ||
-        complaint.hostel.toLowerCase().includes(query) ||
-        complaint.category.toLowerCase().includes(query),
-    );
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(search.trim()), 300);
+    return () => clearTimeout(timer);
   }, [search]);
 
-  const totalComplaints = 148;
-  const pendingComplaints = 32;
-  const inProgressComplaints = 47;
-  const resolvedComplaints = 61;
-  const overdueComplaints = 8;
-  const pendingRequirements = requirements.filter(
-    (item) =>
-      item.status === "REQUESTED" ||
-      item.status === "UNDER REVIEW",
-  ).length;
+  const dashboard = useLoad(
+    () => (ready ? admin.dashboard() : Promise.resolve(null)),
+    [ready],
+  );
+  // Searching goes to the server so it covers every complaint, not only the five on screen
+  const searched = useLoad(
+    () =>
+      ready && query
+        ? admin.complaints({ search: query, limit: 10 })
+        : Promise.resolve(null),
+    [ready, query],
+  );
+
+  const filteredComplaints: Complaint[] = (
+    query ? searched.data?.data ?? [] : dashboard.data?.recentComplaints ?? []
+  ).map(toRow);
+
+  const counts = dashboard.data?.counts;
+  const totalComplaints = counts?.total ?? 0;
+  const pendingComplaints = counts?.pending ?? 0;
+  const inProgressComplaints = counts?.inProgress ?? 0;
+  const resolvedComplaints = counts?.resolved ?? 0;
+  const overdueComplaints = counts?.overdue ?? 0;
+  const pendingRequirements = dashboard.data?.pendingRequirements ?? 0;
+
+  const byHostel = dashboard.data?.byHostel ?? [];
+  const hostelRows: Array<[string, number]> = [
+    ...byHostel.slice(0, 3).map((item): [string, number] => [item.hostel, item.count]),
+    ...(byHostel.length > 3
+      ? [["Other Hostels", byHostel.slice(3).reduce((sum, item) => sum + item.count, 0)] as [string, number]]
+      : []),
+  ];
 
   return (
     <div className="flex min-h-screen bg-[#f7f7f8]">
       <AdminSidebar />
 
       <div className="min-w-0 flex-1">
-        <TopBar />
+        <TopBar name={user?.fullName ?? null} onSignOut={signOut} />
 
         <main className="px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
           <div className="mx-auto max-w-[1440px]">
@@ -668,7 +632,7 @@ export default function AdminDashboardPage() {
                     <tbody>
                       {filteredComplaints.map((complaint) => (
                         <tr
-                          key={complaint.id}
+                          key={complaint.key}
                           className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50"
                         >
                           <td className="px-5 py-4">
@@ -696,7 +660,7 @@ export default function AdminDashboardPage() {
                             <span
                               className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyles[complaint.status]}`}
                             >
-                              {complaint.status}
+                              {statusText(complaint.status)}
                             </span>
                           </td>
 
@@ -711,7 +675,7 @@ export default function AdminDashboardPage() {
 
                 <div className="divide-y divide-slate-100 md:hidden">
                   {filteredComplaints.map((complaint) => (
-                    <article key={complaint.id} className="p-4">
+                    <article key={complaint.key} className="p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-bold text-slate-800">
@@ -725,7 +689,7 @@ export default function AdminDashboardPage() {
                         <span
                           className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${statusStyles[complaint.status]}`}
                         >
-                          {complaint.status}
+                          {statusText(complaint.status)}
                         </span>
                       </div>
 
@@ -770,13 +734,19 @@ export default function AdminDashboardPage() {
                   ))}
                 </div>
 
-                {filteredComplaints.length === 0 && (
+                {(dashboard.error || searched.error) && (
+                  <p role="alert" className="px-6 py-6 text-center text-xs text-rose-600">
+                    {dashboard.error ?? searched.error}
+                  </p>
+                )}
+
+                {filteredComplaints.length === 0 && !dashboard.loading && !searched.loading && (
                   <div className="px-6 py-12 text-center">
                     <p className="text-sm font-semibold text-slate-700">
                       No complaints found
                     </p>
                     <p className="mt-1 text-xs text-slate-400">
-                      Try a different search term.
+                      {query ? "Try a different search term." : "Complaints raised by students will appear here."}
                     </p>
                   </div>
                 )}
@@ -895,10 +865,10 @@ export default function AdminDashboardPage() {
                         <div
                           className={`h-full rounded-full ${color}`}
                           style={{
-                            width: `${Math.min(
+                            width: `${totalComplaints ? Math.min(
                               100,
                               (Number(value) / totalComplaints) * 100,
-                            )}%`,
+                            ) : 0}%`,
                           }}
                         />
                       </div>
@@ -924,12 +894,10 @@ export default function AdminDashboardPage() {
                 </div>
 
                 <div className="mt-5 space-y-3">
-                  {[
-                    ["Gautam Buddha Hostel", 52],
-                    ["Ashoka Hostel", 41],
-                    ["Ambedkar Hostel", 34],
-                    ["Other Hostels", 21],
-                  ].map(([hostel, count]) => (
+                  {hostelRows.length === 0 && (
+                    <p className="text-xs text-slate-400">No complaints recorded yet.</p>
+                  )}
+                  {hostelRows.map(([hostel, count]) => (
                     <div
                       key={hostel as string}
                       className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2.5"
@@ -1031,7 +999,14 @@ export default function AdminDashboardPage() {
                 </Link>
               </div>
 
-              <div className="hidden overflow-x-auto md:block">
+              {requirements.length === 0 && (
+                <p className="px-5 py-10 text-center text-xs text-slate-400">
+                  Requirement requests from wardens and caretakers will appear here once
+                  the hostel staff module is connected.
+                </p>
+              )}
+
+              <div className={requirements.length ? "hidden overflow-x-auto md:block" : "hidden"}>
                 <table className="w-full min-w-[750px] border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/70 text-left">
@@ -1158,12 +1133,11 @@ export default function AdminDashboardPage() {
             <div className="mt-6 rounded-xl border border-[#ead2dc] bg-[#fdf7f9] px-4 py-3">
               <p className="text-xs leading-5 text-slate-600">
                 <span className="font-semibold text-[#8e123f]">
-                  Backend integration:
+                  Live data:
                 </span>{" "}
-                Complaint counts, assignments, requirements, escalations,
-                users, hostels and reports shown here are currently
-                frontend demonstration data. They will be replaced with
-                live PostgreSQL data through the NestJS API.
+                Complaint counts, recent complaints and hostel figures come
+                from the backend. Requirement requests will appear once the
+                Warden and Caretaker modules are connected.
               </p>
             </div>
           </div>

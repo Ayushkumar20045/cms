@@ -1,49 +1,20 @@
+"use client";
+
 import Link from "next/link";
 
-type ComplaintStatus =
-  | "In Progress"
-  | "Under Review"
-  | "Resolved"
-  | "Waiting";
+import { StatusBadge } from "@/components/student/status-badge";
+import { UserMenu } from "@/components/student/user-menu";
+import { student } from "@/lib/api/endpoints";
+import type { ComplaintStatus } from "@/lib/api/types";
+import { formatDate, studentStatusLabel, timeAgo } from "@/lib/format";
+import { useLoad, useSession } from "@/lib/session";
 
-interface Complaint {
-  id: string;
-  title: string;
-  category: string;
-  status: ComplaintStatus;
-  date: string;
-}
-
-const complaints: Complaint[] = [
-  {
-    id: "CMP-2026-0148",
-    title: "Water leakage in hostel washroom",
-    category: "Maintenance",
-    status: "In Progress",
-    date: "02 Oct 2026",
-  },
-  {
-    id: "CMP-2026-0139",
-    title: "Ceiling fan not working",
-    category: "Electrical",
-    status: "Under Review",
-    date: "30 Sep 2026",
-  },
-  {
-    id: "CMP-2026-0117",
-    title: "Hostel corridor light replacement",
-    category: "Electrical",
-    status: "Resolved",
-    date: "25 Sep 2026",
-  },
-  {
-    id: "CMP-2026-0104",
-    title: "Cleaning request for common area",
-    category: "Cleanliness",
-    status: "Waiting",
-    date: "21 Sep 2026",
-  },
-];
+const activityDot: Partial<Record<ComplaintStatus, string>> = {
+  RESOLVED: "bg-emerald-500",
+  CLOSED: "bg-emerald-500",
+  UNDER_REVIEW: "bg-blue-500",
+  SUBMITTED: "bg-blue-500",
+};
 
 function NavigationIcon({ type }: { type: "dashboard" | "complaints" }) {
   if (type === "dashboard") {
@@ -86,22 +57,21 @@ function NavigationIcon({ type }: { type: "dashboard" | "complaints" }) {
   );
 }
 
-function StatusBadge({ status }: { status: ComplaintStatus }) {
-  const styles: Record<ComplaintStatus, string> = {
-    "In Progress": "bg-amber-50 text-amber-700 ring-amber-600/10",
-    "Under Review": "bg-blue-50 text-blue-700 ring-blue-600/10",
-    Resolved: "bg-emerald-50 text-emerald-700 ring-emerald-600/10",
-    Waiting: "bg-slate-100 text-slate-600 ring-slate-500/10",
-  };
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${styles[status]}`}
-    >
-      <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-      {status}
-    </span>
-  );
+function activityText(complaintNumber: string, status: ComplaintStatus): string {
+  switch (status) {
+    case "SUBMITTED":
+      return `Complaint ${complaintNumber} was submitted.`;
+    case "UNDER_REVIEW":
+      return `Review started for ${complaintNumber}.`;
+    case "WAITING_FOR_INFORMATION":
+      return `More information is needed for ${complaintNumber}.`;
+    case "RESOLVED":
+      return `Complaint ${complaintNumber} was resolved.`;
+    case "REOPENED":
+      return `Complaint ${complaintNumber} was reopened.`;
+    default:
+      return `Complaint ${complaintNumber} is now ${studentStatusLabel[status].toLowerCase()}.`;
+  }
 }
 
 function StatIcon({
@@ -171,6 +141,23 @@ function StatIcon({
 }
 
 export default function StudentDashboard() {
+  const { user, signOut } = useSession("student");
+  const ready = Boolean(user);
+
+  const profile = useLoad(() => (ready ? student.profile() : Promise.resolve(null)), [ready]);
+  const recent = useLoad(
+    () => (ready ? student.complaints({ limit: 4 }) : Promise.resolve(null)),
+    [ready],
+  );
+  const activity = useLoad(
+    () => (ready ? student.activity(3) : Promise.resolve(null)),
+    [ready],
+  );
+
+  const summary = profile.data?.summary;
+  const complaints = recent.data?.data ?? [];
+  const hostelUser = profile.data?.user ?? user;
+
   return (
     <main className="min-h-screen bg-[#f7f7f8] text-slate-900">
       <div className="flex min-h-screen">
@@ -239,27 +226,14 @@ export default function StudentDashboard() {
               </h1>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#a5174d]/10 text-xs font-bold text-[#a5174d]">
-                AK
-              </div>
-
-              <div className="hidden sm:block">
-                <p className="text-xs font-semibold text-slate-800">
-                  Ayush Kumar
-                </p>
-                <p className="text-[10px] text-slate-400">
-                  Student
-                </p>
-              </div>
-            </div>
+            <UserMenu user={user} roleLabel="Student" onSignOut={signOut} />
           </header>
 
           <div className="mx-auto max-w-[1350px] px-5 py-7 sm:px-8">
             <section className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-sm font-medium text-[#a5174d]">
-                  Welcome back, Ayush
+                  {user ? `Welcome back, ${user.firstName}` : " "}
                 </p>
 
                 <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
@@ -304,7 +278,7 @@ export default function StudentDashboard() {
                       Total Complaints
                     </p>
                     <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-                      12
+                      {summary?.total ?? "–"}
                     </p>
                   </div>
 
@@ -325,7 +299,7 @@ export default function StudentDashboard() {
                       Active Complaints
                     </p>
                     <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-                      3
+                      {summary?.active ?? "–"}
                     </p>
                   </div>
 
@@ -346,7 +320,7 @@ export default function StudentDashboard() {
                       Resolved
                     </p>
                     <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-                      9
+                      {summary?.resolved ?? "–"}
                     </p>
                   </div>
 
@@ -412,7 +386,7 @@ export default function StudentDashboard() {
                             </p>
 
                             <p className="mt-1 text-[11px] text-slate-400">
-                              {complaint.id}
+                              {complaint.complaintNumber}
                             </p>
                           </div>
                         </td>
@@ -426,12 +400,24 @@ export default function StudentDashboard() {
                         </td>
 
                         <td className="px-5 py-4 text-xs text-slate-500">
-                          {complaint.date}
+                          {formatDate(complaint.createdAt)}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+
+                {!recent.loading && complaints.length === 0 && !recent.error && (
+                  <p className="px-5 py-10 text-center text-xs text-slate-400">
+                    You have not raised any complaints yet.
+                  </p>
+                )}
+
+                {recent.error && (
+                  <p role="alert" className="px-5 py-10 text-center text-xs text-rose-600">
+                    {recent.error}
+                  </p>
+                )}
               </div>
             </section>
 
@@ -448,47 +434,35 @@ export default function StudentDashboard() {
                 </div>
 
                 <div className="mt-5 space-y-5">
-                  <div className="flex gap-3">
-                    <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#a5174d]" />
+                  {(activity.data ?? []).map((item) => (
+                    <div
+                      key={`${item.complaintNumber}-${item.createdAt}-${item.newStatus}`}
+                      className="flex gap-3"
+                    >
+                      <div
+                        className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
+                          activityDot[item.newStatus] ?? "bg-[#a5174d]"
+                        }`}
+                      />
 
-                    <div>
-                      <p className="text-xs font-medium text-slate-700">
-                        Complaint CMP-2026-0148 is now in progress.
-                      </p>
+                      <div>
+                        <p className="text-xs font-medium text-slate-700">
+                          {activityText(item.complaintNumber, item.newStatus)}
+                        </p>
 
-                      <p className="mt-1 text-[11px] text-slate-400">
-                        2 hours ago · Hostel Staff
-                      </p>
+                        <p className="mt-1 text-[11px] text-slate-400">
+                          {timeAgo(item.createdAt)}
+                          {item.actorRole ? ` · ${item.actorRole}` : ""}
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  ))}
 
-                  <div className="flex gap-3">
-                    <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-blue-500" />
-
-                    <div>
-                      <p className="text-xs font-medium text-slate-700">
-                        Additional review started for CMP-2026-0139.
-                      </p>
-
-                      <p className="mt-1 text-[11px] text-slate-400">
-                        Yesterday · Hostel Warden
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
-
-                    <div>
-                      <p className="text-xs font-medium text-slate-700">
-                        Complaint CMP-2026-0117 was resolved.
-                      </p>
-
-                      <p className="mt-1 text-[11px] text-slate-400">
-                        25 Sep 2026 · Hostel Staff
-                      </p>
-                    </div>
-                  </div>
+                  {!activity.loading && (activity.data ?? []).length === 0 && (
+                    <p className="text-xs text-slate-400">
+                      Updates on your complaints will appear here.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -507,21 +481,21 @@ export default function StudentDashboard() {
                   </p>
 
                   <p className="mt-1 text-sm font-semibold text-slate-800">
-                    Gautam Buddha Hostel
+                    {hostelUser?.hostel?.name ?? "Not allocated"}
                   </p>
 
                   <div className="mt-4 grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-[10px] text-slate-400">Room</p>
                       <p className="mt-1 text-xs font-medium text-slate-700">
-                        B-204
+                        {hostelUser?.roomNumber ?? "—"}
                       </p>
                     </div>
 
                     <div>
                       <p className="text-[10px] text-slate-400">Block</p>
                       <p className="mt-1 text-xs font-medium text-slate-700">
-                        Block B
+                        {hostelUser?.block ?? "—"}
                       </p>
                     </div>
                   </div>

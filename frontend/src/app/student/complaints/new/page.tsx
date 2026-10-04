@@ -1,28 +1,20 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChangeEvent, FormEvent, useRef, useState } from "react";
 
-type ComplaintCategory =
-  | ""
-  | "Maintenance"
-  | "Ethernet"
-  | "Electrical"
-  | "Civil"
-  | "Cleanliness";
+import { ApiError } from "@/lib/api/client";
+import { complaints as complaintsApi } from "@/lib/api/endpoints";
+import { initials } from "@/lib/format";
+import { useLoad, useSession } from "@/lib/session";
+
+type ComplaintCategory = string;
 
 interface SelectedFile {
   id: string;
   file: File;
 }
-
-const categories: Exclude<ComplaintCategory, "">[] = [
-  "Maintenance",
-  "Ethernet",
-  "Electrical",
-  "Civil",
-  "Cleanliness",
-];
 
 const MAX_DESCRIPTION_WORDS = 200;
 
@@ -180,7 +172,17 @@ function ComplaintIcon() {
 }
 
 export default function RaiseComplaintPage() {
+  const router = useRouter();
+  const { user, signOut } = useSession("student");
+  const ready = Boolean(user);
+  const categoryList = useLoad(
+    () => (ready ? complaintsApi.categories() : Promise.resolve(null)),
+    [ready],
+  );
+  const categories = (categoryList.data ?? []).map((item) => item.name);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [submitted, setSubmitted] = useState<string | null>(null);
 
   const [category, setCategory] = useState<ComplaintCategory>("");
   const [title, setTitle] = useState("");
@@ -320,12 +322,32 @@ export default function RaiseComplaintPage() {
 
     setIsSubmitting(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 400));
+    // Hostel and student details are taken from the signed-in account by the server
+    const form = new FormData();
+    form.set("category", category);
+    form.set("title", title.trim());
+    form.set("description", description.trim());
+    for (const { file } of selectedFiles) {
+      form.append("files", file);
+    }
 
-    setIsSubmitting(false);
-    setFormMessage(
-      "Your complaint form is ready. Submission will be connected when the backend is integrated.",
-    );
+    try {
+      const complaint = await complaintsApi.create(form);
+      setSubmitted(complaint.complaintNumber);
+      setSelectedFiles([]);
+      setTimeout(() => router.push("/student/complaints"), 2500);
+    } catch (error) {
+      setIsSubmitting(false);
+
+      if (error instanceof ApiError) {
+        setCategoryError(error.fieldError("category") ?? "");
+        setTitleError(error.fieldError("title") ?? "");
+        setDescriptionError(error.fieldError("description") ?? "");
+        setFormMessage(error.errors.length ? "Please correct the highlighted fields." : error.message);
+      } else {
+        setFormMessage("Unable to submit your complaint right now. Please try again.");
+      }
+    }
   }
 
   return (
@@ -430,14 +452,22 @@ export default function RaiseComplaintPage() {
             <div className="flex items-center gap-3">
               <div className="hidden text-right sm:block">
                 <p className="text-sm font-semibold text-slate-800">
-                  Ayush Kumar
+                  {user?.fullName ?? " "}
                 </p>
                 <p className="text-xs text-slate-400">Student</p>
               </div>
 
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f8e9ef] text-sm font-bold text-[#a5174d]">
-                AK
+                {user ? initials(user.fullName) : ""}
               </div>
+
+              <button
+                type="button"
+                onClick={signOut}
+                className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-[11px] font-semibold text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-800"
+              >
+                Sign out
+              </button>
             </div>
           </header>
 
@@ -762,6 +792,16 @@ export default function RaiseComplaintPage() {
                     </div>
                   </div>
 
+                  {submitted && (
+                    <div
+                      role="status"
+                      className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-5 text-emerald-800"
+                    >
+                      Complaint <span className="font-semibold">{submitted}</span>{" "}
+                      has been submitted. Taking you to My Complaints…
+                    </div>
+                  )}
+
                   {formMessage && (
                     <div
                       role="status"
@@ -782,10 +822,10 @@ export default function RaiseComplaintPage() {
 
                   <button
                     type="submit"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || Boolean(submitted)}
                     className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#a5174d] px-6 text-sm font-semibold text-white shadow-sm transition-all hover:bg-[#8e123f] hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {isSubmitting ? "Preparing..." : "Submit Complaint"}
+                    {submitted ? "Submitted" : isSubmitting ? "Submitting..." : "Submit Complaint"}
                   </button>
                 </div>
               </div>

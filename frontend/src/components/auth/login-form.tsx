@@ -1,6 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+
+import { ApiError } from "@/lib/api/client";
+import { auth } from "@/lib/api/endpoints";
 
 import { IdentifierField } from "./identifier-field";
 import { PasswordField } from "./password-field";
@@ -54,6 +58,7 @@ const staffRoles: Array<{
 ];
 
 export function LoginForm({ role }: LoginFormProps) {
+  const router = useRouter();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [staffRole, setStaffRole] = useState<StaffRole>("warden");
@@ -102,21 +107,27 @@ export function LoginForm({ role }: LoginFormProps) {
     setErrorMessage(null);
     setIsSubmitting(true);
 
-    /*
-     * The real authentication request will be connected
-     * after the NestJS authentication module is implemented.
-     *
-     * The selected staff role will eventually be sent
-     * with the authentication request and verified by
-     * the backend against the authenticated account.
-     */
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // The selected portal and staff role are sent along, but the backend decides
+    // access from the role stored on the account and refuses a mismatch.
+    try {
+      const result = await auth.login({
+        identifier: normalizedIdentifier,
+        password,
+        portal: role,
+        staffRole: role === "staff" ? staffRole : undefined,
+        rememberMe,
+      });
 
-    setIsSubmitting(false);
-
-    setErrorMessage(
-      "Authentication is not connected yet. The backend login service will be added next.",
-    );
+      setPassword("");
+      router.replace(result.redirectTo);
+    } catch (error) {
+      setIsSubmitting(false);
+      setErrorMessage(
+        error instanceof ApiError
+          ? error.message
+          : "Unable to sign in right now. Please try again.",
+      );
+    }
   }
 
   return (

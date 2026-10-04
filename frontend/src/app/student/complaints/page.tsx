@@ -1,106 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
-type ComplaintStatus =
-  | "In Progress"
-  | "Under Review"
-  | "Resolved"
-  | "Waiting";
+import { StatusBadge } from "@/components/student/status-badge";
+import { UserMenu } from "@/components/student/user-menu";
+import { complaints as complaintsApi, student } from "@/lib/api/endpoints";
+import type { ComplaintStatus } from "@/lib/api/types";
+import { allStatuses, formatDate, studentStatusLabel } from "@/lib/format";
+import { useLoad, useSession } from "@/lib/session";
 
-interface Complaint {
-  id: string;
-  title: string;
-  category: string;
-  status: ComplaintStatus;
-  submitted: string;
-  updated: string;
-}
-
-const complaints: Complaint[] = [
-  {
-    id: "CMP-2026-0148",
-    title: "Water leakage in hostel washroom",
-    category: "Maintenance",
-    status: "In Progress",
-    submitted: "02 Oct 2026",
-    updated: "02 Oct 2026",
-  },
-  {
-    id: "CMP-2026-0139",
-    title: "Ceiling fan not working",
-    category: "Electrical",
-    status: "Under Review",
-    submitted: "30 Sep 2026",
-    updated: "01 Oct 2026",
-  },
-  {
-    id: "CMP-2026-0117",
-    title: "Hostel corridor light replacement",
-    category: "Electrical",
-    status: "Resolved",
-    submitted: "25 Sep 2026",
-    updated: "25 Sep 2026",
-  },
-  {
-    id: "CMP-2026-0104",
-    title: "Cleaning request for common area",
-    category: "Cleanliness",
-    status: "Waiting",
-    submitted: "21 Sep 2026",
-    updated: "23 Sep 2026",
-  },
-  {
-    id: "CMP-2026-0098",
-    title: "Water cooler not functioning",
-    category: "Maintenance",
-    status: "Resolved",
-    submitted: "18 Sep 2026",
-    updated: "20 Sep 2026",
-  },
-  {
-    id: "CMP-2026-0089",
-    title: "Bathroom tap replacement request",
-    category: "Maintenance",
-    status: "Resolved",
-    submitted: "14 Sep 2026",
-    updated: "16 Sep 2026",
-  },
-  {
-    id: "CMP-2026-0075",
-    title: "Hostel room tube light issue",
-    category: "Electrical",
-    status: "Resolved",
-    submitted: "09 Sep 2026",
-    updated: "10 Sep 2026",
-  },
-  {
-    id: "CMP-2026-0068",
-    title: "Common area cleanliness concern",
-    category: "Cleanliness",
-    status: "Resolved",
-    submitted: "05 Sep 2026",
-    updated: "06 Sep 2026",
-  },
-];
-
-const categories = [
-  "All Categories",
-  "Maintenance",
-  "Electrical",
-  "Ethernet",
-  "Cleanliness",
-  "Civil",
-];
-
-const statuses = [
-  "All Status",
-  "In Progress",
-  "Under Review",
-  "Resolved",
-  "Waiting",
-];
+const ALL_CATEGORIES = "All Categories";
+const ALL_STATUS = "All Status";
+const PAGE_SIZE = 50;
 
 function DashboardIcon() {
   return (
@@ -199,24 +111,6 @@ function ChevronDownIcon() {
   );
 }
 
-function StatusBadge({ status }: { status: ComplaintStatus }) {
-  const styles: Record<ComplaintStatus, string> = {
-    "In Progress": "bg-amber-50 text-amber-700 ring-amber-600/10",
-    "Under Review": "bg-blue-50 text-blue-700 ring-blue-600/10",
-    Resolved: "bg-emerald-50 text-emerald-700 ring-emerald-600/10",
-    Waiting: "bg-slate-100 text-slate-600 ring-slate-500/10",
-  };
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ring-1 ring-inset ${styles[status]}`}
-    >
-      <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-current" />
-      {status}
-    </span>
-  );
-}
-
 function EmptyState() {
   return (
     <div className="flex min-h-[300px] flex-col items-center justify-center px-6 py-12 text-center">
@@ -237,40 +131,56 @@ function EmptyState() {
 }
 
 export default function MyComplaintsPage() {
+  const { user, signOut } = useSession("student");
+  const ready = Boolean(user);
+
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("All Status");
-  const [category, setCategory] = useState("All Categories");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [status, setStatus] = useState(ALL_STATUS);
+  const [category, setCategory] = useState(ALL_CATEGORIES);
 
-  const filteredComplaints = useMemo(() => {
-    const query = search.trim().toLowerCase();
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
-    return complaints.filter((complaint) => {
-      const matchesSearch =
-        !query ||
-        complaint.id.toLowerCase().includes(query) ||
-        complaint.title.toLowerCase().includes(query) ||
-        complaint.category.toLowerCase().includes(query);
+  const categoryList = useLoad(
+    () => (ready ? complaintsApi.categories() : Promise.resolve(null)),
+    [ready],
+  );
+  const categories = [ALL_CATEGORIES, ...(categoryList.data ?? []).map((item) => item.name)];
+  const statuses = [ALL_STATUS, ...allStatuses];
 
-      const matchesStatus =
-        status === "All Status" || complaint.status === status;
+  // Filtering happens on the server, so large histories are never loaded into the browser at once
+  const result = useLoad(
+    () =>
+      ready
+        ? student.complaints({
+            search: debouncedSearch,
+            status: status === ALL_STATUS ? "" : (status as ComplaintStatus),
+            category: category === ALL_CATEGORIES ? "" : category,
+            limit: PAGE_SIZE,
+          })
+        : Promise.resolve(null),
+    [ready, debouncedSearch, status, category],
+  );
+  const total = useLoad(
+    () => (ready ? student.profile() : Promise.resolve(null)),
+    [ready],
+  );
 
-      const matchesCategory =
-        category === "All Categories" ||
-        complaint.category === category;
-
-      return matchesSearch && matchesStatus && matchesCategory;
-    });
-  }, [search, status, category]);
+  const filteredComplaints = result.data?.data ?? [];
+  const totalComplaints = total.data?.summary.total ?? 0;
 
   const hasFilters =
     Boolean(search.trim()) ||
-    status !== "All Status" ||
-    category !== "All Categories";
+    status !== ALL_STATUS ||
+    category !== ALL_CATEGORIES;
 
   function clearFilters() {
     setSearch("");
-    setStatus("All Status");
-    setCategory("All Categories");
+    setStatus(ALL_STATUS);
+    setCategory(ALL_CATEGORIES);
   }
 
   return (
@@ -342,20 +252,7 @@ export default function MyComplaintsPage() {
               </h1>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#a5174d]/10 text-xs font-bold text-[#a5174d]">
-                AK
-              </div>
-
-              <div className="hidden sm:block">
-                <p className="text-xs font-semibold text-slate-800">
-                  Ayush Kumar
-                </p>
-                <p className="text-[10px] text-slate-400">
-                  Student
-                </p>
-              </div>
-            </div>
+            <UserMenu user={user} roleLabel="Student" onSignOut={signOut} />
           </header>
 
           <div className="mx-auto max-w-[1350px] px-5 py-7 sm:px-8">
@@ -420,7 +317,9 @@ export default function MyComplaintsPage() {
                       >
                         {statuses.map((item) => (
                           <option key={item} value={item}>
-                            {item}
+                            {item === ALL_STATUS
+                              ? item
+                              : studentStatusLabel[item as ComplaintStatus]}
                           </option>
                         ))}
                       </select>
@@ -464,7 +363,7 @@ export default function MyComplaintsPage() {
                     </span>{" "}
                     of{" "}
                     <span className="font-semibold text-slate-600">
-                      {complaints.length}
+                      {totalComplaints}
                     </span>{" "}
                     complaints
                   </p>
@@ -481,7 +380,15 @@ export default function MyComplaintsPage() {
                 </div>
               </div>
 
-              {filteredComplaints.length === 0 ? (
+              {result.error ? (
+                <p role="alert" className="px-6 py-12 text-center text-sm text-rose-600">
+                  {result.error}
+                </p>
+              ) : result.loading && !result.data ? (
+                <p className="px-6 py-12 text-center text-xs text-slate-400">
+                  Loading your complaints…
+                </p>
+              ) : filteredComplaints.length === 0 ? (
                 <EmptyState />
               ) : (
                 <>
@@ -520,7 +427,7 @@ export default function MyComplaintsPage() {
                                 </p>
 
                                 <p className="mt-1 text-[11px] text-slate-400">
-                                  {complaint.id}
+                                  {complaint.complaintNumber}
                                 </p>
                               </div>
                             </td>
@@ -534,11 +441,11 @@ export default function MyComplaintsPage() {
                             </td>
 
                             <td className="px-5 py-4 text-xs text-slate-500">
-                              {complaint.submitted}
+                              {formatDate(complaint.createdAt)}
                             </td>
 
                             <td className="px-5 py-4 text-xs text-slate-500">
-                              {complaint.updated}
+                              {formatDate(complaint.updatedAt)}
                             </td>
                           </tr>
                         ))}
@@ -559,7 +466,7 @@ export default function MyComplaintsPage() {
                             </p>
 
                             <p className="mt-1 text-[11px] text-slate-400">
-                              {complaint.id}
+                              {complaint.complaintNumber}
                             </p>
                           </div>
 
@@ -583,14 +490,14 @@ export default function MyComplaintsPage() {
                             </p>
 
                             <p className="mt-1 text-xs text-slate-600">
-                              {complaint.submitted}
+                              {formatDate(complaint.createdAt)}
                             </p>
                           </div>
                         </div>
 
                         <div className="mt-4 border-t border-slate-100 pt-3">
                           <p className="text-[11px] text-slate-400">
-                            Updated {complaint.updated}
+                            Updated {formatDate(complaint.updatedAt)}
                           </p>
                         </div>
                       </article>
