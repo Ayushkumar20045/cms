@@ -1,0 +1,14 @@
+fastapi==0.118.*
+uvicorn[standard]==0.37.*
+pydantic[email]==2.*
+pydantic-settings==2.*
+SQLAlchemy==2.0.*
+psycopg[binary]==3.2.*
+alembic==1.16.*
+GeoAlchemy2==0.18.*
+python-multipart==0.0.*
+PyJWT==2.10.*
+argon2-cffi==25.*
+redis==6.*
+pytest==8.*
+httpx==0.28.*
