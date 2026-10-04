@@ -566,7 +566,7 @@ export default function AdminDashboardPage() {
               />
             </section>
 
-            <section className="mt-6 grid gap-5 xl:grid-cols-[1fr_360px]">
+            <section className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
               <div className="rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
                 <div className="flex flex-col gap-4 border-b border-slate-200 p-4 sm:p-5 md:flex-row md:items-center md:justify-between">
                   <div>

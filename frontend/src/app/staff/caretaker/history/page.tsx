@@ -775,7 +775,7 @@ export default function CaretakerWorkHistoryPage() {
               )}
             </section>
 
-            <section className="mt-6 grid gap-4 lg:grid-cols-[1fr_340px]">
+            <section className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f8e9ef] text-[#a5174d]">
