@@ -35,10 +35,11 @@ def test_complaint_validation_errors(student):
     assert fields == {'title', 'category', 'description'}
 
 
-def test_student_without_hostel_allocation_cannot_submit():
+def test_student_without_hostel_must_choose_a_building():
     u = make_user(['STUDENT'], hostel_code=None)
     r = raise_complaint(client_for(u, 'student'))
-    assert r.status_code == 409
+    assert r.status_code == 422
+    assert any(e['field'] == 'buildingId' for e in r.json()['errors'])
 
 
 def test_attachments_are_checked_by_content(student):

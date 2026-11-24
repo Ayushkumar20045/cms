@@ -6,18 +6,21 @@ from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.api.complaints import detail, record_status
-from app.authorization.catalog import PRIVILEGED_ROLES, STAFF_ROLES
+from app.authorization.catalog import ASSIGNABLE_ROLES, DEPARTMENT_ROLES, PRIVILEGED_ROLES
 from app.authorization.deps import CurrentUser, require_permission
+from app.authorization.scope import can_view, not_found
 from app.core.security import hash_password
 from app.db import get_db
-from app.models import (AssignmentType, AuditLog, Category, Complaint, ComplaintAssignment, ComplaintStatus as S, Hostel, Priority,
-                        RefreshToken, Role, User, UserStatus, user_roles)
+from app.models import (AssignmentType, AuditLog, Building, BuildingType, Category, Complaint, ComplaintAssignment,
+                        ComplaintDecision, ComplaintStatus as S, Department, Hostel, Priority, RefreshToken, Requirement, RequirementStatus, Role, User,
+                        UserStatus, user_roles)
 from app.schemas import (AdminComplaintUpdateIn, AdminCounts, AdminDashboard, AssignIn, AuditOut, CategoryIn, CategoryOut,
                          CategoryUpdateIn, ComplaintDetail, ComplaintSummary, EscalateIn, Envelope, HostelCount, HostelIn, HostelOut,
-                         HostelUpdateIn, PageOf, Pagination, PasswordResetIn, UserCreateIn, UserOut, UserUpdateIn)
+                         HostelUpdateIn, MonthCount, NamedCount, PageOf, Pagination, PasswordResetIn, ReportOut, UserCreateIn, UserOut,
+                         UserUpdateIn)
 from app.serializers import complaint_summary, user_brief, user_out
 from app.services.audit import audit
-from app.services.workflow import IN_PROGRESS_GROUP, OPEN, PENDING, RESOLVED_SET, apply_status, check_transition
+from app.services.workflow import DECIDABLE, IN_PROGRESS_GROUP, OPEN, PENDING, RESOLVED_SET, apply_status, check_transition
 
 router = APIRouter(prefix='/api/v1/admin', tags=['admin'])
 
@@ -46,7 +49,7 @@ def dashboard(db: Session = Depends(get_db), _: CurrentUser = Depends(require_pe
                            resolved=count(RESOLVED_SET), overdue=overdue),
         by_status=by_status, by_hostel=[HostelCount(hostel=h, count=n) for h, n in hostels],
         recent_complaints=[complaint_summary(c) for c in recent],
-        pending_requirements=0))  # requirement tickets arrive with the Warden/Caretaker module
+        pending_requirements=db.scalar(select(func.count(Requirement.id)).where(Requirement.status == RequirementStatus.PENDING))))
 
 
 # ================================================================ complaints
@@ -56,7 +59,7 @@ def list_complaints(search: str | None = Query(None, max_length=100), status_: S
                     category: str | None = Query(None, max_length=60), hostel_id: int | None = Query(None, alias='hostelId'),
                     priority: Priority | None = None, overdue: bool = False, page: int = Query(1, ge=1), limit: int = Query(20, ge=1, le=100),
                     db: Session = Depends(get_db), _: CurrentUser = Depends(require_permission('COMPLAINT_VIEW_ALL'))):
-    stmt = select(Complaint).join(Category).join(User, Complaint.student_id == User.id).outerjoin(Hostel, Complaint.hostel_id == Hostel.id)
+    stmt = select(Complaint).join(Category).join(User, Complaint.requester_id == User.id).outerjoin(Hostel, Complaint.hostel_id == Hostel.id)
     if search:
         like = f'%{search.strip()}%'
         stmt = stmt.where(or_(Complaint.complaint_number.ilike(like), Complaint.title.ilike(like), Category.name.ilike(like),
@@ -81,6 +84,14 @@ def _complaint(db: Session, complaint_id: uuid.UUID) -> Complaint:
     c = db.get(Complaint, complaint_id)
     if c is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail='Complaint not found')
+    return c
+
+
+def _scoped_complaint(db: Session, complaint_id: uuid.UUID, current: CurrentUser) -> Complaint:
+    """For actions open to non-admin staff: the complaint must also be inside the actor's scope."""
+    c = db.get(Complaint, complaint_id)
+    if c is None or not can_view(current, c):
+        raise not_found()
     return c
 
 
@@ -134,13 +145,18 @@ def _assignee(db: Session, assignee_id: uuid.UUID, c: Complaint) -> tuple[User, 
     u = db.get(User, assignee_id)
     if u is None or u.status != UserStatus.ACTIVE:
         raise HTTPException(422, detail=[{'field': 'assigneeId', 'message': 'Assignee must be an active staff member'}])
-    roles = u.role_names & STAFF_ROLES
+    roles = u.role_names & ASSIGNABLE_ROLES
     if not roles:
-        raise HTTPException(422, detail=[{'field': 'assigneeId', 'message': 'Assignee must be a warden, caretaker or authority'}])
-    kind = AssignmentType(sorted(roles, key=['CARETAKER', 'WARDEN', 'AUTHORITY'].index)[0])
+        raise HTTPException(422, detail=[{'field': 'assigneeId',
+                                          'message': 'Assignee must be a warden, caretaker, technician or authority'}])
+    kind = AssignmentType(sorted(roles, key=['CARETAKER', 'TECHNICIAN', 'WARDEN', 'AUTHORITY'].index)[0])
     # Hostel staff can only be given complaints from the hostel they serve
     if kind in (AssignmentType.WARDEN, AssignmentType.CARETAKER) and u.hostel_id != c.hostel_id:
         raise HTTPException(422, detail=[{'field': 'assigneeId', 'message': f"{u.full_name} does not serve this complaint's hostel"}])
+    # Technicians only work on requests routed to their own department
+    if kind == AssignmentType.TECHNICIAN and (c.department_id is None or u.department_id != c.department_id):
+        raise HTTPException(422, detail=[{'field': 'assigneeId',
+                                          'message': f"{u.full_name} is not in this request's department"}])
     return u, kind
 
 
@@ -151,7 +167,9 @@ def _assign(db, request, current, c: Complaint, body: AssignIn, replace: bool) -
         raise HTTPException(status.HTTP_409_CONFLICT, detail=f'Already assigned to {u.full_name}')
     if replace and not same_kind:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=f'No active {kind.value.lower()} assignment to replace; use assign')
-    if not replace and same_kind:
+    # While a request is still new, caretaker assignments are only offers waiting for an answer: assigning replaces them
+    pending_offers = c.status in DECIDABLE
+    if not replace and same_kind and not pending_offers:
         raise HTTPException(status.HTTP_409_CONFLICT, detail=f'A {kind.value.lower()} is already assigned; use reassign')
     if c.status in (S.RESOLVED, S.CLOSED, S.REJECTED, S.DUPLICATE):
         raise HTTPException(status.HTTP_409_CONFLICT, detail='A resolved or closed complaint cannot be assigned')
@@ -161,6 +179,9 @@ def _assign(db, request, current, c: Complaint, body: AssignIn, replace: bool) -
         a.is_active, a.unassigned_at = False, now
         previous.append(str(a.assigned_to_id))
     db.add(ComplaintAssignment(complaint_id=c.id, assigned_to_id=u.id, assigned_by_id=current.id, assignment_type=kind, remarks=body.remarks))
+    # Assigning a new request to a worker also accepts it on the requester's behalf
+    if kind != AssignmentType.WARDEN and c.decision is None and pending_offers:
+        c.decision, c.decided_by_id, c.decided_at = ComplaintDecision.ACCEPTED, current.id, now
     # Giving the work to a caretaker or authority moves an un-started complaint to Assigned
     if kind != AssignmentType.WARDEN and c.status in (S.SUBMITTED, S.UNDER_REVIEW, S.REOPENED, S.ESCALATED):
         prev = c.status
@@ -175,7 +196,7 @@ def _assign(db, request, current, c: Complaint, body: AssignIn, replace: bool) -
 @router.post('/complaints/{complaint_id}/assign', response_model=Envelope[ComplaintDetail])
 def assign(complaint_id: uuid.UUID, body: AssignIn, request: Request, db: Session = Depends(get_db),
            current: CurrentUser = Depends(require_permission('COMPLAINT_ASSIGN'))):
-    c = _complaint(db, complaint_id)
+    c = _scoped_complaint(db, complaint_id, current)
     _assign(db, request, current, c, body, replace=False)
     return Envelope(data=detail(db, c, current), message='Complaint assigned')
 
@@ -183,7 +204,7 @@ def assign(complaint_id: uuid.UUID, body: AssignIn, request: Request, db: Sessio
 @router.post('/complaints/{complaint_id}/reassign', response_model=Envelope[ComplaintDetail])
 def reassign(complaint_id: uuid.UUID, body: AssignIn, request: Request, db: Session = Depends(get_db),
              current: CurrentUser = Depends(require_permission('COMPLAINT_REASSIGN'))):
-    c = _complaint(db, complaint_id)
+    c = _scoped_complaint(db, complaint_id, current)
     _assign(db, request, current, c, body, replace=True)
     return Envelope(data=detail(db, c, current), message='Complaint reassigned')
 
@@ -191,7 +212,7 @@ def reassign(complaint_id: uuid.UUID, body: AssignIn, request: Request, db: Sess
 @router.post('/complaints/{complaint_id}/escalate', response_model=Envelope[ComplaintDetail])
 def escalate(complaint_id: uuid.UUID, body: EscalateIn, request: Request, db: Session = Depends(get_db),
              current: CurrentUser = Depends(require_permission('COMPLAINT_ESCALATE'))):
-    c = _complaint(db, complaint_id)
+    c = _scoped_complaint(db, complaint_id, current)
     check_transition(c.status, S.ESCALATED)
     prev = c.status
     apply_status(c, S.ESCALATED)
@@ -232,6 +253,19 @@ def _hostel_ok(db: Session, hostel_id: int | None):
         raise HTTPException(422, detail=[{'field': 'hostelId', 'message': 'Unknown hostel'}])
 
 
+def _department_ok(db: Session, department_id: int | None, field: str = 'departmentId'):
+    if department_id is not None and db.get(Department, department_id) is None:
+        raise HTTPException(422, detail=[{'field': field, 'message': 'Unknown department'}])
+
+
+def _department_required(u: User):
+    """Technicians, supervisors and department heads see work by department, so they must have one."""
+    roles = u.role_names & DEPARTMENT_ROLES
+    if roles and u.department_id is None:
+        raise HTTPException(422, detail=[{'field': 'departmentId',
+                                          'message': f"A {sorted(roles)[0].replace('_', ' ').lower()} must belong to a department"}])
+
+
 def _revoke_sessions(db: Session, user_id: uuid.UUID):
     db.execute(update(RefreshToken).where(RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None))
                .values(revoked_at=datetime.now(timezone.utc)))
@@ -239,13 +273,13 @@ def _revoke_sessions(db: Session, user_id: uuid.UUID):
 
 def _user_snapshot(u: User) -> dict:
     return {'email': u.email, 'name': u.full_name, 'roles': sorted(u.role_names), 'hostelId': u.hostel_id,
-            'roomNumber': u.room_number, 'block': u.block}
+            'roomNumber': u.room_number, 'block': u.block, 'departmentId': u.department_id}
 
 
 @router.get('/users', response_model=PageOf[UserOut])
 def list_users(search: str | None = Query(None, max_length=100), role: str | None = Query(None, max_length=30),
                status_: UserStatus | None = Query(None, alias='status'), hostel_id: int | None = Query(None, alias='hostelId'),
-               page: int = Query(1, ge=1), limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db),
+               department_id: int | None = Query(None, alias='departmentId'), page: int = Query(1, ge=1), limit: int = Query(20, ge=1, le=100), db: Session = Depends(get_db),
                _: CurrentUser = Depends(require_permission('USER_VIEW'))):
     stmt = select(User)
     if search:
@@ -257,6 +291,8 @@ def list_users(search: str | None = Query(None, max_length=100), role: str | Non
         stmt = stmt.where(User.status == status_)
     if hostel_id:
         stmt = stmt.where(User.hostel_id == hostel_id)
+    if department_id:
+        stmt = stmt.where(User.department_id == department_id)
     total = db.scalar(select(func.count()).select_from(stmt.subquery()))
     rows = db.scalars(stmt.order_by(User.created_at.desc()).offset((page - 1) * limit).limit(limit)).unique().all()
     return PageOf(data=[user_out(u) for u in rows], pagination=_page(total, page, limit))
@@ -271,9 +307,11 @@ def create_user(body: UserCreateIn, request: Request, db: Session = Depends(get_
     if email and db.scalar(select(User.id).where(func.lower(User.email) == email)):
         raise HTTPException(status.HTTP_409_CONFLICT, detail='That email is already registered')
     _hostel_ok(db, body.hostel_id)
+    _department_ok(db, body.department_id)
     u = User(login_id=body.login_id, email=email, password_hash=hash_password(body.password), first_name=body.first_name,
              last_name=body.last_name, phone=body.phone, hostel_id=body.hostel_id, room_number=body.room_number, block=body.block,
-             roles=_roles(db, body.roles, current))
+             department_id=body.department_id, roles=_roles(db, body.roles, current))
+    _department_required(u)
     db.add(u)
     db.flush()
     audit(db, request, current.id, 'USER_CREATED', 'user', u.id, new_value={'loginId': u.login_id, **_user_snapshot(u)})
@@ -294,12 +332,15 @@ def update_user(user_id: uuid.UUID, body: UserUpdateIn, request: Request, db: Se
         u.roles = _roles(db, data.pop('roles'), current)
     if 'hostel_id' in data:
         _hostel_ok(db, data['hostel_id'])
+    if 'department_id' in data:
+        _department_ok(db, data['department_id'])
     if data.get('email'):
         data['email'] = data['email'].lower()
         if db.scalar(select(User.id).where(func.lower(User.email) == data['email'], User.id != u.id)):
             raise HTTPException(status.HTTP_409_CONFLICT, detail='That email is already registered')
     for k, v in data.items():
         setattr(u, k, v)
+    _department_required(u)
     new = _user_snapshot(u)
     audit(db, request, current.id, 'ROLE_CHANGED' if old['roles'] != new['roles'] else 'USER_UPDATED', 'user', u.id, old, new)
     db.commit()
@@ -349,12 +390,14 @@ def list_roles(db: Session = Depends(get_db), _: CurrentUser = Depends(require_p
 
 
 @router.get('/staff', response_model=Envelope[list[UserOut]])
-def list_staff(hostel_id: int | None = Query(None, alias='hostelId'), db: Session = Depends(get_db),
-               _: CurrentUser = Depends(require_permission('COMPLAINT_ASSIGN'))):
-    """Active wardens, caretakers and authorities, for the assignment picker."""
+def list_staff(hostel_id: int | None = Query(None, alias='hostelId'), department_id: int | None = Query(None, alias='departmentId'),
+               db: Session = Depends(get_db), _: CurrentUser = Depends(require_permission('COMPLAINT_ASSIGN'))):
+    """Active wardens, caretakers, technicians and authorities, for the assignment picker."""
     stmt = (select(User).where(User.status == UserStatus.ACTIVE,
                                exists().where(and_(user_roles.c.user_id == User.id, user_roles.c.role_id == Role.id,
-                                                   Role.name.in_(STAFF_ROLES)))))
+                                                   Role.name.in_(ASSIGNABLE_ROLES)))))
+    if department_id:
+        stmt = stmt.where(User.department_id == department_id)
     if hostel_id:
         stmt = stmt.where(or_(User.hostel_id == hostel_id, exists().where(and_(
             user_roles.c.user_id == User.id, user_roles.c.role_id == Role.id, Role.name == 'AUTHORITY'))))
@@ -369,7 +412,7 @@ def _hostel_out(db: Session, h: Hostel) -> HostelOut:
     open_count = db.scalar(select(func.count(Complaint.id)).where(Complaint.hostel_id == h.id, Complaint.status.in_(OPEN)))
     wardens = db.scalars(select(User).where(User.hostel_id == h.id, User.status == UserStatus.ACTIVE, exists().where(and_(
         user_roles.c.user_id == User.id, user_roles.c.role_id == Role.id, Role.name == 'WARDEN')))).unique().all()
-    return HostelOut(id=h.id, code=h.code, name=h.name, capacity=h.capacity, contact_phone=h.contact_phone, contact_email=h.contact_email,
+    return HostelOut(id=h.id, code=h.code, name=h.name, building_id=h.building_id, capacity=h.capacity, contact_phone=h.contact_phone, contact_email=h.contact_email,
                      is_active=h.is_active, student_count=students, open_complaints=open_count, wardens=[user_brief(w) for w in wardens])
 
 
@@ -383,7 +426,19 @@ def create_hostel(body: HostelIn, request: Request, db: Session = Depends(get_db
                   current: CurrentUser = Depends(require_permission('HOSTEL_CREATE'))):
     if db.scalar(select(Hostel.id).where(or_(func.lower(Hostel.code) == body.code.lower(), func.lower(Hostel.name) == body.name.lower()))):
         raise HTTPException(status.HTTP_409_CONFLICT, detail='A hostel with that code or name already exists')
-    h = Hostel(**body.model_dump())
+    # A hostel drawn on the campus map arrives as a HOSTEL building with no hostel yet: adopt it
+    building = db.scalar(select(Building).where(func.lower(Building.name) == body.name.lower(),
+                                                Building.building_type == BuildingType.HOSTEL,
+                                                ~exists().where(Hostel.building_id == Building.id)))
+    if building is None:
+        if db.scalar(select(Building.id).where(or_(func.lower(Building.code) == body.code.lower(),
+                                                   func.lower(Building.name) == body.name.lower()))):
+            raise HTTPException(status.HTTP_409_CONFLICT, detail='A building with that code or name already exists')
+        # Every hostel is also a building on the campus map, so requests can be located inside it
+        building = Building(code=body.code, name=body.name, building_type=BuildingType.HOSTEL)
+        db.add(building)
+        db.flush()
+    h = Hostel(**body.model_dump(), building_id=building.id)
     db.add(h)
     db.flush()
     audit(db, request, current.id, 'HOSTEL_CREATED', 'hostel', h.id, new_value=body.model_dump())
@@ -401,6 +456,8 @@ def update_hostel(hostel_id: int, body: HostelUpdateIn, request: Request, db: Se
     old = {k: getattr(h, k) for k in data}
     for k, v in data.items():
         setattr(h, k, v)
+    if h.building is not None and 'name' in data:
+        h.building.name = h.name
     audit(db, request, current.id, 'HOSTEL_UPDATED', 'hostel', h.id, old_value=old, new_value=data)
     db.commit()
     return Envelope(data=_hostel_out(db, h), message='Hostel updated')
@@ -418,7 +475,8 @@ def create_category(body: CategoryIn, request: Request, db: Session = Depends(ge
                     current: CurrentUser = Depends(require_permission('CATEGORY_MANAGE'))):
     if db.scalar(select(Category.id).where(func.lower(Category.name) == body.name.lower())):
         raise HTTPException(status.HTTP_409_CONFLICT, detail='That category already exists')
-    cat = Category(name=body.name, description=body.description)
+    _department_ok(db, body.department_id)
+    cat = Category(name=body.name, description=body.description, department_id=body.department_id)
     db.add(cat)
     db.flush()
     audit(db, request, current.id, 'CATEGORY_CREATED', 'category', cat.id, new_value=body.model_dump())
@@ -433,12 +491,68 @@ def update_category(category_id: int, body: CategoryUpdateIn, request: Request, 
     if cat is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail='Category not found')
     data = body.model_dump(exclude_unset=True)
+    if 'department_id' in data:
+        _department_ok(db, data['department_id'])
     old = {k: getattr(cat, k) for k in data}
     for k, v in data.items():
         setattr(cat, k, v)
     audit(db, request, current.id, 'CATEGORY_UPDATED', 'category', cat.id, old_value=old, new_value=data)
     db.commit()
     return Envelope(data=cat, message='Category updated')
+
+
+# ================================================================ reports
+
+@router.get('/reports', response_model=Envelope[ReportOut])
+def reports(days: int | None = Query(None, ge=1, le=3650), db: Session = Depends(get_db),
+            _: CurrentUser = Depends(require_permission('REPORT_VIEW_ALL'))):
+    """Campus-wide figures for requests raised in the last `days` days (all time when omitted)."""
+    since = func.now() - func.make_interval(0, 0, 0, days) if days else None
+    window = [Complaint.created_at >= since] if since is not None else []
+    base = select(Complaint).where(*window).subquery()
+
+    def counts(column, join=None, label=None):
+        stmt = select(label if label is not None else column, func.count(base.c.id)).select_from(base)
+        if join is not None:
+            stmt = stmt.join(*join)
+        rows = db.execute(stmt.group_by(label if label is not None else column).order_by(func.count(base.c.id).desc())).all()
+        return [NamedCount(name=str(getattr(n, 'value', n)) if n is not None else 'Not set', count=c) for n, c in rows]
+
+    by_status_rows = dict(db.execute(select(base.c.status, func.count()).group_by(base.c.status)).all())
+    total = sum(by_status_rows.values())
+    resolved_rows = db.execute(select(base.c.created_at, base.c.resolved_at, base.c.expected_resolution_at)
+                               .where(base.c.resolved_at.is_not(None))).all()
+    hours = [(r - c).total_seconds() / 3600 for c, r, _ in resolved_rows]
+    with_target = [(r, e) for _, r, e in resolved_rows if e is not None]
+    overdue = db.scalar(select(func.count()).select_from(base).where(
+        base.c.expected_resolution_at.is_not(None), base.c.expected_resolution_at < func.now(), base.c.status.in_(OPEN)))
+
+    month = func.date_trunc('month', base.c.created_at)
+    raised = dict(db.execute(select(month, func.count()).group_by(month)).all())
+    rmonth = func.date_trunc('month', base.c.resolved_at)
+    done = dict(db.execute(select(rmonth, func.count()).where(base.c.resolved_at.is_not(None)).group_by(rmonth)).all())
+    months = []
+    now = datetime.now(timezone.utc)
+    for i in range(5, -1, -1):
+        y, m = divmod(now.year * 12 + now.month - 1 - i, 12)
+        key = datetime(y, m + 1, 1, tzinfo=timezone.utc)
+        months.append(MonthCount(month=key.strftime('%b %Y'),
+                                 raised=sum(n for k, n in raised.items() if (k.year, k.month) == (key.year, key.month)),
+                                 resolved=sum(n for k, n in done.items() if (k.year, k.month) == (key.year, key.month))))
+
+    return Envelope(data=ReportOut(
+        days=days, total=total, open=sum(n for s, n in by_status_rows.items() if s in OPEN),
+        resolved=sum(n for s, n in by_status_rows.items() if s in RESOLVED_SET),
+        escalated=by_status_rows.get(S.ESCALATED, 0), overdue=overdue,
+        avg_resolution_hours=round(sum(hours) / len(hours), 1) if hours else None,
+        resolved_on_time_percent=round(100 * sum(r <= e for r, e in with_target) / len(with_target), 1) if with_target else None,
+        by_status=[NamedCount(name=s.value, count=n) for s, n in sorted(by_status_rows.items(), key=lambda x: -x[1])],
+        by_category=counts(None, (Category, Category.id == base.c.category_id), Category.name),
+        by_hostel=counts(None, (Hostel, Hostel.id == base.c.hostel_id), Hostel.name),
+        by_department=[NamedCount(name=n or 'Not routed', count=c) for n, c in db.execute(
+            select(Department.name, func.count(base.c.id)).select_from(base).outerjoin(Department, Department.id == base.c.department_id)
+            .group_by(Department.name).order_by(func.count(base.c.id).desc())).all()],
+        by_month=months))
 
 
 # ================================================================ audit

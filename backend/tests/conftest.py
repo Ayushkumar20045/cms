@@ -41,6 +41,13 @@ def database():
 
 
 @pytest.fixture(autouse=True)
+def no_real_email(monkeypatch):
+    """Tests never send email; tests that check emails capture them with their own fixture."""
+    from app.services import mailer
+    monkeypatch.setattr(mailer, 'send_many', lambda emails: None)
+
+
+@pytest.fixture(autouse=True)
 def clean_redis():
     get_redis().flushdb()
     yield

@@ -3,7 +3,8 @@ import uuid
 from datetime import datetime
 
 from geoalchemy2 import Geometry
-from sqlalchemy import (Boolean, Column, DateTime, Enum, ForeignKey, Integer, Sequence, String, Table, Text, func)
+from sqlalchemy import (Boolean, Column, DateTime, Enum, ForeignKey, Integer, Sequence, String, Table, Text, UniqueConstraint,
+                        func)
 from sqlalchemy.dialects.postgresql import INET, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -55,19 +56,128 @@ class Permission(Base):
     created_at: Mapped[datetime] = _created()
 
 
+# ---------------------------------------------------------------- campus locations
+# Zone -> Building -> Floor -> Room. Geometry is WGS 84 and optional until the GBU GIS layers are digitised.
+
+class BuildingType(str, enum.Enum):
+    ACADEMIC = 'ACADEMIC'
+    HOSTEL = 'HOSTEL'
+    ADMINISTRATIVE = 'ADMINISTRATIVE'
+    RESIDENTIAL = 'RESIDENTIAL'
+    LIBRARY = 'LIBRARY'
+    SPORTS = 'SPORTS'
+    MEDICAL = 'MEDICAL'
+    UTILITY = 'UTILITY'
+    OTHER = 'OTHER'
+
+
+class RoomType(str, enum.Enum):
+    CLASSROOM = 'CLASSROOM'
+    LABORATORY = 'LABORATORY'
+    OFFICE = 'OFFICE'
+    HOSTEL_ROOM = 'HOSTEL_ROOM'
+    WASHROOM = 'WASHROOM'
+    COMMON_AREA = 'COMMON_AREA'
+    STORE = 'STORE'
+    OTHER = 'OTHER'
+
+
+class Campus(Base):
+    """The university boundary drawn on the private campus map. One row per campus (GBU has one)."""
+    __tablename__ = 'campuses'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(30), unique=True)
+    name: Mapped[str] = mapped_column(String(120))
+    geom = mapped_column(Geometry(geometry_type='GEOMETRY', srid=4326), nullable=False)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+
+class Zone(Base):
+    __tablename__ = 'zones'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(30), unique=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    description: Mapped[str | None] = mapped_column(String(255))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    geom = mapped_column(Geometry(geometry_type='GEOMETRY', srid=4326), nullable=True)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+
+class Building(Base):
+    __tablename__ = 'buildings'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    zone_id: Mapped[int | None] = mapped_column(ForeignKey('zones.id'), index=True)
+    code: Mapped[str] = mapped_column(String(30), unique=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    building_type: Mapped[BuildingType] = mapped_column(_enum(BuildingType, 'building_type'), default=BuildingType.OTHER, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    geom = mapped_column(Geometry(geometry_type='GEOMETRY', srid=4326), nullable=True)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+    zone: Mapped[Zone | None] = relationship(lazy='joined')
+    floors: Mapped[list['Floor']] = relationship(order_by='Floor.level', back_populates='building')
+
+
+class Floor(Base):
+    __tablename__ = 'floors'
+    __table_args__ = (UniqueConstraint('building_id', 'level'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    building_id: Mapped[int] = mapped_column(ForeignKey('buildings.id', ondelete='CASCADE'), index=True)
+    # 0 = ground floor, negative = basement
+    level: Mapped[int] = mapped_column(Integer)
+    name: Mapped[str] = mapped_column(String(60))
+    created_at: Mapped[datetime] = _created()
+
+    building: Mapped[Building] = relationship(back_populates='floors')
+    rooms: Mapped[list['Room']] = relationship(order_by='Room.number', back_populates='floor')
+
+
+class Room(Base):
+    __tablename__ = 'rooms'
+    __table_args__ = (UniqueConstraint('floor_id', 'number'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    floor_id: Mapped[int] = mapped_column(ForeignKey('floors.id', ondelete='CASCADE'), index=True)
+    number: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str | None] = mapped_column(String(120))
+    room_type: Mapped[RoomType] = mapped_column(_enum(RoomType, 'room_type'), default=RoomType.OTHER)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = _created()
+
+    floor: Mapped[Floor] = relationship(back_populates='rooms', lazy='joined')
+
+
+class Department(Base):
+    """A maintenance or service department that requests are routed to (Electrical, Civil, IT ...)."""
+    __tablename__ = 'departments'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(30), unique=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    description: Mapped[str | None] = mapped_column(String(255))
+    contact_email: Mapped[str | None] = mapped_column(String(254))
+    contact_phone: Mapped[str | None] = mapped_column(String(20))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+
 class Hostel(Base):
+    """Hostel administration (wardens, allocations). Its physical structure is the linked HOSTEL building."""
     __tablename__ = 'hostels'
     id: Mapped[int] = mapped_column(primary_key=True)
     code: Mapped[str] = mapped_column(String(30), unique=True)
     name: Mapped[str] = mapped_column(String(120), unique=True)
+    building_id: Mapped[int | None] = mapped_column(ForeignKey('buildings.id'), unique=True)
     capacity: Mapped[int | None] = mapped_column(Integer)
     contact_phone: Mapped[str | None] = mapped_column(String(20))
     contact_email: Mapped[str | None] = mapped_column(String(254))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    # Building footprint on the campus map (WGS 84); optional until the GBU GIS layers are digitised
-    geom = mapped_column(Geometry(geometry_type='GEOMETRY', srid=4326), nullable=True)
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
+
+    building: Mapped[Building | None] = relationship(lazy='joined')
 
 
 class UserStatus(str, enum.Enum):
@@ -90,12 +200,15 @@ class User(Base):
     hostel_id: Mapped[int | None] = mapped_column(ForeignKey('hostels.id'), index=True)
     room_number: Mapped[str | None] = mapped_column(String(20))
     block: Mapped[str | None] = mapped_column(String(40))
+    # Technicians, supervisors and department heads: the department they work in (also scopes what they see)
+    department_id: Mapped[int | None] = mapped_column(ForeignKey('departments.id'), index=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
 
     roles: Mapped[list[Role]] = relationship(secondary=user_roles, lazy='selectin')
     hostel: Mapped[Hostel | None] = relationship(lazy='joined')
+    department: Mapped[Department | None] = relationship(lazy='joined')
 
     @property
     def full_name(self) -> str:
@@ -123,8 +236,12 @@ class Category(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(60), unique=True)
     description: Mapped[str | None] = mapped_column(String(255))
+    # Requests in this category are routed to this department
+    department_id: Mapped[int | None] = mapped_column(ForeignKey('departments.id'))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = _created()
+
+    department: Mapped[Department | None] = relationship(lazy='joined')
 
 
 class ComplaintStatus(str, enum.Enum):
@@ -133,6 +250,7 @@ class ComplaintStatus(str, enum.Enum):
     ASSIGNED = 'ASSIGNED'
     IN_PROGRESS = 'IN_PROGRESS'
     WAITING_FOR_INFORMATION = 'WAITING_FOR_INFORMATION'
+    WAITING_FOR_MATERIALS = 'WAITING_FOR_MATERIALS'
     RESOLVED = 'RESOLVED'
     CLOSED = 'CLOSED'
     REJECTED = 'REJECTED'
@@ -152,6 +270,7 @@ class AssignmentType(str, enum.Enum):
     WARDEN = 'WARDEN'
     CARETAKER = 'CARETAKER'
     AUTHORITY = 'AUTHORITY'
+    TECHNICIAN = 'TECHNICIAN'
     ADMIN = 'ADMIN'
 
 
@@ -160,15 +279,28 @@ class CommentVisibility(str, enum.Enum):
     STUDENT_VISIBLE = 'STUDENT_VISIBLE'
 
 
+class ComplaintDecision(str, enum.Enum):
+    """Whether the responsible staff member took the request on or turned it down."""
+    ACCEPTED = 'ACCEPTED'
+    REJECTED = 'REJECTED'
+
+
 complaint_number_seq = Sequence('complaint_number_seq', metadata=Base.metadata)
 
 
 class Complaint(Base):
+    """A service request. Raised by any requester (student, faculty, staff) about a place on campus."""
     __tablename__ = 'complaints'
     id: Mapped[uuid.UUID] = _uuid_pk()
     complaint_number: Mapped[str] = mapped_column(String(20), unique=True)
-    student_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'), index=True)
+    requester_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'), index=True)
+    # Where the problem is. hostel_id is set when the building is a hostel, so warden scoping keeps working.
+    building_id: Mapped[int | None] = mapped_column(ForeignKey('buildings.id'), index=True)
+    room_id: Mapped[int | None] = mapped_column(ForeignKey('rooms.id'))
+    location_details: Mapped[str | None] = mapped_column(String(255))
     hostel_id: Mapped[int | None] = mapped_column(ForeignKey('hostels.id'), index=True)
+    # Responsible department, taken from the category when the request is raised
+    department_id: Mapped[int | None] = mapped_column(ForeignKey('departments.id'), index=True)
     category_id: Mapped[int] = mapped_column(ForeignKey('complaint_categories.id'))
     title: Mapped[str] = mapped_column(String(150))
     description: Mapped[str] = mapped_column(Text, default='')
@@ -178,11 +310,20 @@ class Complaint(Base):
     expected_resolution_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Accept / reject decision by the caretaker, warden, supervisor or admin; shown to the requester and admins
+    decision: Mapped[ComplaintDecision | None] = mapped_column(_enum(ComplaintDecision, 'complaint_decision'), index=True)
+    decision_reason: Mapped[str | None] = mapped_column(Text)
+    decided_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey('users.id'))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = _created()
     updated_at: Mapped[datetime] = _updated()
 
-    student: Mapped[User] = relationship(foreign_keys=[student_id], lazy='joined')
+    requester: Mapped[User] = relationship(foreign_keys=[requester_id], lazy='joined')
+    decided_by: Mapped[User | None] = relationship(foreign_keys=[decided_by_id], lazy='joined')
+    building: Mapped[Building | None] = relationship(lazy='joined')
+    room: Mapped[Room | None] = relationship(lazy='joined')
     hostel: Mapped[Hostel | None] = relationship(lazy='joined')
+    department: Mapped[Department | None] = relationship(lazy='joined')
     category: Mapped[Category] = relationship(lazy='joined')
     assignments: Mapped[list['ComplaintAssignment']] = relationship(order_by='ComplaintAssignment.assigned_at', lazy='selectin')
     history: Mapped[list['ComplaintStatusHistory']] = relationship(order_by='ComplaintStatusHistory.id', lazy='selectin')
@@ -244,6 +385,64 @@ class ComplaintAttachment(Base):
     mime_type: Mapped[str] = mapped_column(String(100))
     size_bytes: Mapped[int] = mapped_column(Integer)
     uploaded_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = _created()
+
+
+class RequirementStatus(str, enum.Enum):
+    PENDING = 'PENDING'
+    APPROVED = 'APPROVED'
+    REJECTED = 'REJECTED'
+    FULFILLED = 'FULFILLED'
+
+
+requirement_number_seq = Sequence('requirement_number_seq', metadata=Base.metadata)
+
+
+class Requirement(Base):
+    """A request for materials or equipment (taps, bulbs, locks ...) raised by hostel or maintenance staff."""
+    __tablename__ = 'requirements'
+    id: Mapped[uuid.UUID] = _uuid_pk()
+    requirement_number: Mapped[str] = mapped_column(String(20), unique=True)
+    item: Mapped[str] = mapped_column(String(150))
+    category_id: Mapped[int | None] = mapped_column(ForeignKey('complaint_categories.id'))
+    quantity: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(Text)
+    status: Mapped[RequirementStatus] = mapped_column(_enum(RequirementStatus, 'requirement_status'),
+                                                      default=RequirementStatus.PENDING, index=True)
+    # Where it is needed, copied from the requester so hostel and department staff see their own requests
+    hostel_id: Mapped[int | None] = mapped_column(ForeignKey('hostels.id'), index=True)
+    department_id: Mapped[int | None] = mapped_column(ForeignKey('departments.id'), index=True)
+    # Optional link to the request that is waiting for these materials
+    complaint_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey('complaints.id'))
+    requested_by_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id'), index=True)
+    decided_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey('users.id'))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision_remarks: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+    category: Mapped[Category | None] = relationship(lazy='joined')
+    hostel: Mapped[Hostel | None] = relationship(lazy='joined')
+    department: Mapped[Department | None] = relationship(lazy='joined')
+    complaint: Mapped[Complaint | None] = relationship(lazy='joined')
+    requested_by: Mapped[User] = relationship(foreign_keys=[requested_by_id], lazy='joined')
+    decided_by: Mapped[User | None] = relationship(foreign_keys=[decided_by_id], lazy='joined')
+
+
+class Notification(Base):
+    """An in-app message for one user (shown in the bell and as a popup). Email copies are sent separately."""
+    __tablename__ = 'notifications'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), index=True)
+    # e.g. COMPLAINT_RAISED, COMPLAINT_ACCEPTED, COMPLAINT_REJECTED, STATUS_CHANGED, RECURRING_ISSUE
+    kind: Mapped[str] = mapped_column(String(40))
+    title: Mapped[str] = mapped_column(String(160))
+    body: Mapped[str] = mapped_column(Text, default='')
+    complaint_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey('complaints.id', ondelete='CASCADE'), index=True)
+    # Page in the frontend to open when the notification is clicked
+    link: Mapped[str | None] = mapped_column(String(255))
+    emailed: Mapped[bool] = mapped_column(Boolean, default=False)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = _created()
 
 

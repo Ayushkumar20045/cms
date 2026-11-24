@@ -1,12 +1,12 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, auth, complaints, students
+from app.api import admin, auth, complaints, locations, notifications, requirements, staff, students
 from app.authorization.deps import CSRF_HEADER
 from app.core.config import get_settings
 from app.responses import install_error_handlers
 
-app = FastAPI(title='GBU Complaint Management System API', version='0.1.0')
+app = FastAPI(title='GBU Smart Campus API', version='0.2.0')
 install_error_handlers(app)
 
 # Only needed when the frontend calls the API from another origin; through the Next.js proxy it is same-origin
@@ -29,7 +29,8 @@ async def security_headers(request: Request, call_next):
     return response
 
 
-for r in (auth.router, students.router, complaints.router, admin.router):
+for r in (auth.router, students.router, complaints.router, locations.router, staff.router, requirements.router, notifications.router,
+          admin.router):
     app.include_router(r)
 
 

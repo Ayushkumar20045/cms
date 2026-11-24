@@ -30,6 +30,10 @@ class CurrentUser:
     def hostel_id(self) -> int | None:
         return self.user.hostel_id
 
+    @property
+    def department_id(self) -> int | None:
+        return self.user.department_id
+
     def has(self, *perms: str) -> bool:
         return any(p in self.permissions for p in perms)
 

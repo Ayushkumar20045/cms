@@ -7,7 +7,8 @@ from typing import Generic, Literal, TypeVar
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
-from app.models import AssignmentType, ComplaintStatus, CommentVisibility, Priority, UserStatus
+from app.models import (AssignmentType, BuildingType, ComplaintDecision, ComplaintStatus, CommentVisibility, Priority,
+                        RequirementStatus, RoomType, UserStatus)
 
 T = TypeVar('T')
 
@@ -48,11 +49,17 @@ class LoginIn(In):
     identifier: str = Field(min_length=1, max_length=254)
     password: str = Field(min_length=1, max_length=256)
     portal: Portal
-    staff_role: Literal['warden', 'caretaker'] | None = None
+    staff_role: Literal['warden', 'caretaker', 'technician', 'supervisor', 'department_head', 'store_manager', 'authority'] | None = None
     remember_me: bool = False
 
 
 class HostelBrief(Camel):
+    id: int
+    code: str
+    name: str
+
+
+class DepartmentBrief(Camel):
     id: int
     code: str
     name: str
@@ -72,6 +79,7 @@ class Me(Camel):
     hostel: HostelBrief | None
     room_number: str | None
     block: str | None
+    department: DepartmentBrief | None = None
 
 
 class LoginOut(Camel):
@@ -87,6 +95,91 @@ class CategoryOut(Camel):
     name: str
     description: str | None
     is_active: bool
+    department: DepartmentBrief | None = None
+
+
+class DepartmentOut(Camel):
+    id: int
+    code: str
+    name: str
+    description: str | None
+    contact_email: str | None
+    contact_phone: str | None
+    is_active: bool
+
+
+class ZoneOut(Camel):
+    id: int
+    code: str
+    name: str
+    description: str | None
+    is_active: bool
+
+
+class BuildingOut(Camel):
+    id: int
+    code: str
+    name: str
+    building_type: BuildingType
+    zone: ZoneOut | None
+    is_active: bool
+    hostel: HostelBrief | None = None
+
+
+class RoomOut(Camel):
+    id: int
+    number: str
+    name: str | None
+    room_type: RoomType
+    is_active: bool
+
+
+class FloorOut(Camel):
+    id: int
+    level: int
+    name: str
+    rooms: list[RoomOut] = []
+
+
+class BuildingDetail(BuildingOut):
+    floors: list[FloorOut]
+
+
+class MapBuilding(Camel):
+    id: int
+    code: str
+    name: str
+    building_type: BuildingType
+    hostel: HostelBrief | None
+    geometry: dict
+    open_requests: int
+
+
+class CampusMap(Camel):
+    """The private GBU map: no third-party tiles, only shapes from the campus GIS import."""
+    name: str | None
+    boundary: dict | None
+    # [minLng, minLat, maxLng, maxLat] of everything drawn
+    bounds: list[float] | None
+    buildings: list[MapBuilding]
+
+
+class GisImportReport(Camel):
+    dry_run: bool
+    boundary: str | None
+    created: list[str]
+    updated: list[str]
+    skipped: list[str]
+    warnings: list[str]
+
+
+class LocationOut(Camel):
+    """Where a request is: building, optional floor and room, and free-text details."""
+    building: BuildingOut | None
+    floor: str | None
+    room: str | None
+    details: str | None
+    label: str
 
 
 # ---------------------------------------------------------------- complaints
@@ -139,10 +232,19 @@ class ComplaintSummary(Camel):
     status: ComplaintStatus
     priority: Priority
     hostel: HostelBrief | None
+    requester: UserBrief
+    # Same person as `requester`; kept under its original name for the existing student/admin pages
     student: UserBrief
+    location: LocationOut
+    department: DepartmentBrief | None
     assigned_to: str | None
     is_overdue: bool
     expected_resolution_at: datetime | None
+    # Accepted or rejected by the responsible staff member, with the reason for a rejection
+    decision: ComplaintDecision | None = None
+    decision_reason: str | None = None
+    decided_by: UserBrief | None = None
+    decided_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -156,6 +258,27 @@ class ComplaintDetail(ComplaintSummary):
     comments: list[CommentOut]
     attachments: list[AttachmentOut]
     allowed_statuses: list[ComplaintStatus]
+    # True when the signed-in user may accept or reject this request now
+    can_decide: bool = False
+    # Earlier requests in the recurring window that describe the same issue (staff only)
+    similar: list['SimilarComplaint'] = []
+
+
+class SimilarComplaint(Camel):
+    id: uuid.UUID
+    complaint_number: str
+    title: str
+    status: ComplaintStatus
+    created_at: datetime
+
+
+class BuildingSummary(Camel):
+    """A building on the campus map, with counts of the requests the viewer is allowed to see there."""
+    building: BuildingOut
+    pending: int
+    in_progress: int
+    resolved: int
+    recent: list[ComplaintSummary]
 
 
 def _words(v: str) -> int:
@@ -169,6 +292,48 @@ class CommentIn(In):
 
 class ReopenIn(In):
     reason: str = Field(min_length=3, max_length=1000)
+
+
+class AcceptIn(In):
+    remarks: str | None = Field(default=None, max_length=1000)
+
+
+class RejectIn(In):
+    reason: str = Field(min_length=5, max_length=1000)
+
+
+class StaffStatusIn(In):
+    status: ComplaintStatus
+    remarks: str | None = Field(default=None, max_length=1000)
+
+
+class NotificationOut(Camel):
+    id: int
+    kind: str
+    title: str
+    body: str
+    link: str | None
+    complaint_id: uuid.UUID | None
+    read: bool
+    created_at: datetime
+
+
+class NotificationList(Camel):
+    items: list[NotificationOut]
+    unread: int
+
+
+class RecurringIssue(Camel):
+    """A group of similar requests (same place and category) raised again and again."""
+    key: str
+    title: str
+    category: str
+    location: str
+    count: int
+    open: int
+    first_at: datetime
+    latest_at: datetime
+    complaints: list[SimilarComplaint]
 
 
 class AdminComplaintUpdateIn(In):
@@ -211,6 +376,103 @@ class StudentProfile(Camel):
     summary: StudentSummary
 
 
+# ---------------------------------------------------------------- requirements
+class RequirementOut(Camel):
+    id: uuid.UUID
+    requirement_number: str
+    item: str
+    category: str | None
+    quantity: int
+    reason: str
+    status: RequirementStatus
+    hostel: HostelBrief | None
+    department: DepartmentBrief | None
+    complaint_number: str | None
+    requested_by: UserBrief
+    requested_by_role: str
+    decided_by: UserBrief | None
+    decided_at: datetime | None
+    decision_remarks: str | None
+    created_at: datetime
+
+
+class RequirementIn(In):
+    item: str = Field(min_length=2, max_length=150)
+    category_id: int | None = None
+    quantity: int = Field(ge=1, le=100000)
+    reason: str = Field(min_length=5, max_length=2000)
+    complaint_id: uuid.UUID | None = None
+
+
+class RequirementDecisionIn(In):
+    decision: Literal['APPROVED', 'REJECTED', 'FULFILLED']
+    remarks: str | None = Field(default=None, max_length=1000)
+
+
+class RequirementCounts(Camel):
+    total: int
+    pending: int
+    approved: int
+    rejected: int
+    fulfilled: int
+
+
+# ---------------------------------------------------------------- reports
+class NamedCount(Camel):
+    name: str
+    count: int
+
+
+class MonthCount(Camel):
+    month: str
+    raised: int
+    resolved: int
+
+
+class ReportOut(Camel):
+    days: int | None
+    total: int
+    open: int
+    resolved: int
+    escalated: int
+    overdue: int
+    avg_resolution_hours: float | None
+    resolved_on_time_percent: float | None
+    by_status: list[NamedCount]
+    by_category: list[NamedCount]
+    by_hostel: list[NamedCount]
+    by_department: list[NamedCount]
+    by_month: list[MonthCount]
+
+
+# ---------------------------------------------------------------- staff
+class StaffCounts(Camel):
+    total: int
+    # Not yet with a worker: submitted, under review or reopened
+    pending: int
+    assigned: int
+    # In progress or escalated
+    in_progress: int
+    waiting_for_materials: int
+    waiting_for_information: int
+    resolved: int
+    overdue: int
+
+
+class StaffHostel(Camel):
+    hostel: HostelBrief
+    students: int
+    # Open requests in the whole hostel
+    active_issues: int
+
+
+class StaffDashboard(Camel):
+    """Counts and recent requests within the signed-in staff member's scope (their hostel, department or assignments)."""
+    counts: StaffCounts
+    recent: list[ComplaintSummary]
+    hostel: StaffHostel | None
+
+
 # ---------------------------------------------------------------- admin
 class AdminCounts(Camel):
     total: int
@@ -246,6 +508,7 @@ class UserOut(Camel):
     hostel: HostelBrief | None
     room_number: str | None
     block: str | None
+    department: DepartmentBrief | None = None
     last_login_at: datetime | None
     created_at: datetime
 
@@ -261,6 +524,7 @@ class UserCreateIn(In):
     hostel_id: int | None = None
     room_number: str | None = Field(default=None, max_length=20)
     block: str | None = Field(default=None, max_length=40)
+    department_id: int | None = None
 
 
 class UserUpdateIn(In):
@@ -272,6 +536,7 @@ class UserUpdateIn(In):
     hostel_id: int | None = None
     room_number: str | None = Field(default=None, max_length=20)
     block: str | None = Field(default=None, max_length=40)
+    department_id: int | None = None
 
 
 class PasswordResetIn(In):
@@ -282,6 +547,7 @@ class HostelOut(Camel):
     id: int
     code: str
     name: str
+    building_id: int | None = None
     capacity: int | None
     contact_phone: str | None
     contact_email: str | None
@@ -310,11 +576,75 @@ class HostelUpdateIn(In):
 class CategoryIn(In):
     name: str = Field(min_length=2, max_length=60)
     description: str | None = Field(default=None, max_length=255)
+    department_id: int | None = None
 
 
 class CategoryUpdateIn(In):
     name: str | None = Field(default=None, min_length=2, max_length=60)
     description: str | None = Field(default=None, max_length=255)
+    department_id: int | None = None
+    is_active: bool | None = None
+
+
+_CODE = r'^[A-Za-z0-9_-]+$'
+
+
+class DepartmentIn(In):
+    code: str = Field(min_length=2, max_length=30, pattern=_CODE)
+    name: str = Field(min_length=2, max_length=120)
+    description: str | None = Field(default=None, max_length=255)
+    contact_email: str | None = Field(default=None, max_length=254, pattern=r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+    contact_phone: str | None = Field(default=None, max_length=20)
+
+
+class DepartmentUpdateIn(In):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    description: str | None = Field(default=None, max_length=255)
+    contact_email: str | None = Field(default=None, max_length=254, pattern=r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+    contact_phone: str | None = Field(default=None, max_length=20)
+    is_active: bool | None = None
+
+
+class ZoneIn(In):
+    code: str = Field(min_length=1, max_length=30, pattern=_CODE)
+    name: str = Field(min_length=2, max_length=120)
+    description: str | None = Field(default=None, max_length=255)
+
+
+class ZoneUpdateIn(In):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    description: str | None = Field(default=None, max_length=255)
+    is_active: bool | None = None
+
+
+class BuildingIn(In):
+    code: str = Field(min_length=1, max_length=30, pattern=_CODE)
+    name: str = Field(min_length=2, max_length=120)
+    building_type: BuildingType = BuildingType.OTHER
+    zone_id: int | None = None
+
+
+class BuildingUpdateIn(In):
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    building_type: BuildingType | None = None
+    zone_id: int | None = None
+    is_active: bool | None = None
+
+
+class FloorIn(In):
+    level: int = Field(ge=-5, le=200)
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+
+
+class RoomIn(In):
+    number: str = Field(min_length=1, max_length=30)
+    name: str | None = Field(default=None, max_length=120)
+    room_type: RoomType = RoomType.OTHER
+
+
+class RoomUpdateIn(In):
+    name: str | None = Field(default=None, max_length=120)
+    room_type: RoomType | None = None
     is_active: bool | None = None
 
 
@@ -334,3 +664,7 @@ class AuditOut(Camel):
     @classmethod
     def ip_str(cls, v):
         return str(v) if v is not None else None
+
+
+# Resolve the forward reference to SimilarComplaint
+ComplaintDetail.model_rebuild()

@@ -21,18 +21,29 @@ router = APIRouter(prefix='/api/v1/auth', tags=['auth'])
 GENERIC_LOGIN_ERROR = 'Invalid ID or password'
 
 
+# Staff roles in order of precedence: (role, staffRole sent by the login form, home page)
+STAFF_PORTALS = [
+    ('DEPARTMENT_HEAD', 'department_head', '/staff/department-head/dashboard'),
+    ('SUPERVISOR', 'supervisor', '/staff/supervisor/dashboard'),
+    ('WARDEN', 'warden', '/staff/warden/dashboard'),
+    ('STORE_MANAGER', 'store_manager', '/staff/store/dashboard'),
+    ('TECHNICIAN', 'technician', '/staff/technician/dashboard'),
+    ('CARETAKER', 'caretaker', '/staff/caretaker/dashboard'),
+    ('AUTHORITY', 'authority', '/staff/authority/dashboard'),
+]
+# Faculty and non-teaching staff raise and track requests through the same portal as students
+REQUESTER_ROLES = {'STUDENT', 'FACULTY', 'STAFF'}
+
+
 def portal_and_home(user: User) -> tuple[str, str | None, str]:
     """The portal an account belongs to and its dashboard, decided only by the roles stored in the database."""
     roles = user.role_names
     if roles & ADMIN_ROLES:
         return 'admin', None, '/admin/dashboard'
-    if 'WARDEN' in roles:
-        return 'staff', 'warden', '/staff/warden/dashboard'
-    if 'CARETAKER' in roles:
-        return 'staff', 'caretaker', '/staff/caretaker/dashboard'
-    if 'AUTHORITY' in roles:
-        return 'staff', None, '/staff/authority/dashboard'
-    if 'STUDENT' in roles:
+    for role, staff_role, home in STAFF_PORTALS:
+        if role in roles:
+            return 'staff', staff_role, home
+    if roles & REQUESTER_ROLES:
         return 'student', None, '/student/dashboard'
     return 'none', None, '/'
 

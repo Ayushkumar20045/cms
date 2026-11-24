@@ -32,6 +32,13 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
 
+  mailpit:
+    # Development-only test inbox: catches every email the backend sends, delivers nothing.
+    # Web inbox at http://localhost:8025
+    image: axllent/mailpit:v1.27
+    ports:
+      - "127.0.0.1:8025:8025"
+
   backend:
     build: ./backend
     env_file: .env
@@ -39,11 +46,15 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-gbu}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-gbu}
       TEST_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-gbu}:${POSTGRES_PASSWORD}@db:5432/gbu_test
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
