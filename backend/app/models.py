@@ -287,6 +287,21 @@ class ComplaintDecision(str, enum.Enum):
 
 complaint_number_seq = Sequence('complaint_number_seq', metadata=Base.metadata)
 
+complaint_labels = Table('complaint_labels', Base.metadata,
+                         Column('complaint_id', UUID(as_uuid=True), ForeignKey('complaints.id', ondelete='CASCADE'), primary_key=True),
+                         Column('label_id', Integer, ForeignKey('labels.id', ondelete='CASCADE'), primary_key=True))
+
+
+class Label(Base):
+    """A free tag staff put on tickets (e.g. safety, exam-week), unlike the single category that routes them."""
+    __tablename__ = 'labels'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(40), unique=True)
+    # One of a fixed palette of colour keys (maroon, blue, green ...), so labels stay readable
+    color: Mapped[str] = mapped_column(String(20), default='slate')
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = _created()
+
 
 class Complaint(Base):
     """A service request. Raised by any requester (student, faculty, staff) about a place on campus."""
@@ -329,10 +344,60 @@ class Complaint(Base):
     history: Mapped[list['ComplaintStatusHistory']] = relationship(order_by='ComplaintStatusHistory.id', lazy='selectin')
     comments: Mapped[list['ComplaintComment']] = relationship(order_by='ComplaintComment.id', lazy='selectin')
     attachments: Mapped[list['ComplaintAttachment']] = relationship(order_by='ComplaintAttachment.created_at', lazy='selectin')
+    labels: Mapped[list[Label]] = relationship(secondary=complaint_labels, order_by='Label.name', lazy='selectin')
+    subtasks: Mapped[list['Subtask']] = relationship(order_by='Subtask.position', lazy='selectin', cascade='all, delete-orphan')
+    links_out: Mapped[list['ComplaintLink']] = relationship(foreign_keys='ComplaintLink.source_id', lazy='selectin',
+                                                            cascade='all, delete-orphan')
+    links_in: Mapped[list['ComplaintLink']] = relationship(foreign_keys='ComplaintLink.target_id', lazy='selectin',
+                                                           cascade='all, delete-orphan')
 
     @property
     def active_assignments(self) -> list['ComplaintAssignment']:
         return [a for a in self.assignments if a.is_active]
+
+
+class LinkType(str, enum.Enum):
+    DUPLICATES = 'DUPLICATES'
+    BLOCKS = 'BLOCKS'
+    RELATES_TO = 'RELATES_TO'
+
+
+class ComplaintLink(Base):
+    """source DUPLICATES target / source BLOCKS target / source RELATES_TO target. Shown on both tickets."""
+    __tablename__ = 'complaint_links'
+    __table_args__ = (UniqueConstraint('source_id', 'target_id', 'link_type'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('complaints.id', ondelete='CASCADE'), index=True)
+    target_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('complaints.id', ondelete='CASCADE'), index=True)
+    link_type: Mapped[LinkType] = mapped_column(_enum(LinkType, 'link_type'))
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = _created()
+
+    source: Mapped['Complaint'] = relationship(foreign_keys=[source_id], lazy='joined', overlaps='links_out')
+    target: Mapped['Complaint'] = relationship(foreign_keys=[target_id], lazy='joined', overlaps='links_in')
+
+
+class SubtaskStatus(str, enum.Enum):
+    TODO = 'TODO'
+    IN_PROGRESS = 'IN_PROGRESS'
+    DONE = 'DONE'
+
+
+class Subtask(Base):
+    """A step of a bigger job inside one ticket, with its own owner and a simple To do / In progress / Done state."""
+    __tablename__ = 'subtasks'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    complaint_id: Mapped[uuid.UUID] = mapped_column(ForeignKey('complaints.id', ondelete='CASCADE'), index=True)
+    title: Mapped[str] = mapped_column(String(150))
+    status: Mapped[SubtaskStatus] = mapped_column(_enum(SubtaskStatus, 'subtask_status'), default=SubtaskStatus.TODO)
+    assignee_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey('users.id'), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    created_by_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey('users.id'))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _created()
+    updated_at: Mapped[datetime] = _updated()
+
+    assignee: Mapped[User | None] = relationship(foreign_keys=[assignee_id], lazy='joined')
 
 
 class ComplaintAssignment(Base):

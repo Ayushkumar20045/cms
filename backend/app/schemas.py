@@ -7,8 +7,8 @@ from typing import Generic, Literal, TypeVar
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
 
-from app.models import (AssignmentType, BuildingType, ComplaintDecision, ComplaintStatus, CommentVisibility, Priority,
-                        RequirementStatus, RoomType, UserStatus)
+from app.models import (AssignmentType, BuildingType, ComplaintDecision, ComplaintStatus, CommentVisibility, LinkType, Priority,
+                        RequirementStatus, RoomType, SubtaskStatus, UserStatus)
 
 T = TypeVar('T')
 
@@ -249,6 +249,87 @@ class ComplaintSummary(Camel):
     updated_at: datetime
 
 
+# ---------------------------------------------------------------- labels, links, sub-tasks
+LABEL_COLORS = ('slate', 'maroon', 'red', 'orange', 'amber', 'green', 'teal', 'blue', 'violet', 'pink')
+
+
+class LabelOut(Camel):
+    id: int
+    name: str
+    color: str
+
+
+class LabelIn(In):
+    name: str = Field(min_length=2, max_length=40)
+    color: str | None = None
+
+    @field_validator('name')
+    @classmethod
+    def clean_name(cls, v: str) -> str:
+        v = ' '.join(v.split()).lower()
+        if not all(ch.isalnum() or ch in ' -_' for ch in v):
+            raise ValueError('Use letters, numbers, spaces, - or _ only')
+        return v
+
+    @field_validator('color')
+    @classmethod
+    def known_color(cls, v: str | None) -> str | None:
+        if v is not None and v not in LABEL_COLORS:
+            raise ValueError(f"Choose one of: {', '.join(LABEL_COLORS)}")
+        return v
+
+
+class LinkedTicket(Camel):
+    id: uuid.UUID
+    complaint_number: str
+    title: str
+    status: ComplaintStatus
+
+
+class LinkOut(Camel):
+    id: int
+    link_type: LinkType
+    # How it reads from this ticket: "blocks", "is blocked by", "duplicates", "is duplicated by", "relates to"
+    label: str
+    outward: bool
+    ticket: LinkedTicket
+
+
+class LinkIn(In):
+    target_key: str = Field(min_length=3, max_length=30)
+    # 'IS_BLOCKED_BY' and 'IS_DUPLICATED_BY' are stored as the reverse link, so the wording matches on both tickets
+    link_type: Literal['BLOCKS', 'IS_BLOCKED_BY', 'DUPLICATES', 'IS_DUPLICATED_BY', 'RELATES_TO']
+
+
+class SubtaskOut(Camel):
+    id: int
+    title: str
+    status: SubtaskStatus
+    assignee: 'UserBrief | None' = None
+    position: int
+    completed_at: datetime | None
+    created_at: datetime
+    # True when the signed-in user may change this sub-task's status
+    can_update: bool = False
+
+
+class SubtaskIn(In):
+    title: str = Field(min_length=3, max_length=150)
+    assignee_id: uuid.UUID | None = None
+
+
+class SubtaskPatch(In):
+    title: str | None = Field(None, min_length=3, max_length=150)
+    status: SubtaskStatus | None = None
+    assignee_id: uuid.UUID | None = None
+    position: int | None = Field(None, ge=0, le=999)
+
+
+class SubtaskProgress(Camel):
+    done: int
+    total: int
+
+
 class ComplaintDetail(ComplaintSummary):
     description: str
     resolved_at: datetime | None
@@ -262,12 +343,20 @@ class ComplaintDetail(ComplaintSummary):
     can_decide: bool = False
     # Earlier requests in the recurring window that describe the same issue (staff only)
     similar: list['SimilarComplaint'] = []
+    # Staff only: tags, linked tickets the user may see, and the steps of the job
+    labels: list[LabelOut] = []
+    links: list[LinkOut] = []
+    subtasks: list[SubtaskOut] = []
+    # True when the user may add or remove labels, links and sub-tasks
+    can_organise: bool = False
 
 
 class BoardCard(ComplaintSummary):
     # Statuses this user may drag the card to; empty when it must be accepted or rejected first
     allowed_moves: list[ComplaintStatus]
     needs_decision: bool
+    labels: list[LabelOut] = []
+    subtasks: SubtaskProgress | None = None
 
 
 class BoardColumn(Camel):

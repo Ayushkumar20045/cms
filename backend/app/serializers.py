@@ -1,8 +1,9 @@
 from app.authorization.deps import CurrentUser, load_principal
-from app.authorization.scope import sees_internal
-from app.models import Building, CommentVisibility, Complaint, User
+from app.authorization.scope import can_view, sees_internal
+from app.models import Building, CommentVisibility, Complaint, LinkType, Subtask, SubtaskStatus, User
 from app.schemas import (AssignmentOut, AttachmentOut, BuildingOut, CommentOut, ComplaintDetail, ComplaintSummary, DepartmentBrief,
-                         HistoryOut, HostelBrief, LocationOut, Me, SimilarComplaint, UserBrief, UserOut, ZoneOut)
+                         HistoryOut, HostelBrief, LabelOut, LinkedTicket, LinkOut, LocationOut, Me, SimilarComplaint, SubtaskOut,
+                         SubtaskProgress, UserBrief, UserOut, ZoneOut)
 from app.services.workflow import DECIDABLE, STAFF_SETTABLE, TRANSITIONS, is_overdue
 
 
@@ -68,6 +69,47 @@ def complaint_summary(c: Complaint) -> ComplaintSummary:
                             created_at=c.created_at, updated_at=c.updated_at)
 
 
+LINK_WORDS = {LinkType.BLOCKS: ('blocks', 'is blocked by'), LinkType.DUPLICATES: ('duplicates', 'is duplicated by'),
+              LinkType.RELATES_TO: ('relates to', 'relates to')}
+
+
+def can_organise(current: CurrentUser, c: Complaint) -> bool:
+    return current.has('COMPLAINT_ORGANISE') and can_view(current, c)
+
+
+def can_update_subtask(current: CurrentUser, c: Complaint, s: Subtask) -> bool:
+    return can_organise(current, c) or (s.assignee_id == current.id and can_view(current, c))
+
+
+def labels_out(c: Complaint) -> list[LabelOut]:
+    return [LabelOut.model_validate(x) for x in c.labels]
+
+
+def subtask_progress(c: Complaint) -> SubtaskProgress | None:
+    if not c.subtasks:
+        return None
+    return SubtaskProgress(done=sum(1 for s in c.subtasks if s.status == SubtaskStatus.DONE), total=len(c.subtasks))
+
+
+def subtask_out(current: CurrentUser, c: Complaint, s: Subtask) -> SubtaskOut:
+    return SubtaskOut(id=s.id, title=s.title, status=s.status, assignee=user_brief(s.assignee), position=s.position,
+                      completed_at=s.completed_at, created_at=s.created_at, can_update=can_update_subtask(current, c, s))
+
+
+def links_out(current: CurrentUser, c: Complaint) -> list[LinkOut]:
+    """Both directions, worded from this ticket. A link to a ticket the user cannot see is left out."""
+    out = []
+    for link, other, outward in ([(x, x.target, True) for x in c.links_out] + [(x, x.source, False) for x in c.links_in]):
+        if not can_view(current, other):
+            continue
+        words = LINK_WORDS[link.link_type]
+        out.append(LinkOut(id=link.id, link_type=link.link_type, label=words[0] if outward else words[1], outward=outward,
+                           ticket=LinkedTicket(id=other.id, complaint_number=other.complaint_number, title=other.title,
+                                               status=other.status)))
+    order = ['blocks', 'is blocked by', 'duplicates', 'is duplicated by', 'relates to']
+    return sorted(out, key=lambda x: (order.index(x.label), x.ticket.complaint_number))
+
+
 def can_decide(current: CurrentUser, c: Complaint) -> bool:
     return current.has('COMPLAINT_DECIDE') and c.status in DECIDABLE
 
@@ -97,4 +139,8 @@ def complaint_detail(c: Complaint, current: CurrentUser, similar: list[Complaint
         can_decide=can_decide(current, c),
         similar=[SimilarComplaint(id=x.id, complaint_number=x.complaint_number, title=x.title, status=x.status, created_at=x.created_at)
                  for x in (similar or []) if internal],
+        labels=labels_out(c) if internal else [],
+        links=links_out(current, c) if internal else [],
+        subtasks=[subtask_out(current, c, s) for s in c.subtasks] if internal else [],
+        can_organise=can_organise(current, c),
     )

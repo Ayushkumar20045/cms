@@ -12,9 +12,9 @@ from app.api.complaints import detail
 from app.authorization.deps import CurrentUser, get_current_user, require_permission
 from app.authorization.scope import can_view, not_found, visible_complaints_clause
 from app.db import get_db
-from app.models import Category, Complaint, ComplaintAssignment, ComplaintStatus as S, Priority
+from app.models import Category, Complaint, ComplaintAssignment, ComplaintStatus as S, Label, Priority
 from app.schemas import BoardCard, BoardColumn, BoardOut, ComplaintDetail, Envelope
-from app.serializers import can_decide, complaint_summary
+from app.serializers import can_decide, complaint_summary, labels_out, subtask_progress
 from app.services.workflow import STAFF_SETTABLE, TRANSITIONS
 
 router = APIRouter(prefix='/api/v1', tags=['board'])
@@ -50,7 +50,8 @@ def allowed_moves(current: CurrentUser, c: Complaint) -> list[S]:
 @router.get('/board', response_model=Envelope[BoardOut])
 def board(search: str | None = Query(None, max_length=100), category: str | None = Query(None, max_length=60),
           priority: Priority | None = None, assignee: str | None = Query(None, pattern='^(me|unassigned)$'),
-          building_id: int | None = Query(None, alias='buildingId'), db: Session = Depends(get_db),
+          building_id: int | None = Query(None, alias='buildingId'), label: str | None = Query(None, max_length=40),
+          db: Session = Depends(get_db),
           current: CurrentUser = Depends(require_permission(*BOARD_VIEW))):
     stmt = select(Complaint).join(Category)
     scope = visible_complaints_clause(current)
@@ -65,6 +66,8 @@ def board(search: str | None = Query(None, max_length=100), category: str | None
         stmt = stmt.where(Complaint.priority == priority)
     if building_id:
         stmt = stmt.where(Complaint.building_id == building_id)
+    if label:
+        stmt = stmt.where(Complaint.labels.any(Label.name == label.strip().lower()))
     active = select(ComplaintAssignment.id).where(ComplaintAssignment.complaint_id == Complaint.id,
                                                   ComplaintAssignment.is_active.is_(True))
     if assignee == 'me':
@@ -82,7 +85,8 @@ def board(search: str | None = Query(None, max_length=100), category: str | None
                           .limit(DONE_CARDS if done else CARDS_PER_COLUMN)).unique().all()
         columns.append(BoardColumn(status=key, title=title, statuses=statuses, total=sum(counts.get(s, 0) for s in statuses),
                                    cards=[BoardCard(**complaint_summary(c).model_dump(), allowed_moves=allowed_moves(current, c),
-                                                    needs_decision=can_decide(current, c)) for c in rows]))
+                                                    needs_decision=can_decide(current, c), labels=labels_out(c),
+                                                    subtasks=subtask_progress(c)) for c in rows]))
     return Envelope(data=BoardOut(columns=columns))
 
 
