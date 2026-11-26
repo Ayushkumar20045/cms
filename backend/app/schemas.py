@@ -264,6 +264,24 @@ class ComplaintDetail(ComplaintSummary):
     similar: list['SimilarComplaint'] = []
 
 
+class BoardCard(ComplaintSummary):
+    # Statuses this user may drag the card to; empty when it must be accepted or rejected first
+    allowed_moves: list[ComplaintStatus]
+    needs_decision: bool
+
+
+class BoardColumn(Camel):
+    status: ComplaintStatus
+    title: str
+    statuses: list[ComplaintStatus]
+    total: int
+    cards: list[BoardCard]
+
+
+class BoardOut(Camel):
+    columns: list[BoardColumn]
+
+
 class SimilarComplaint(Camel):
     id: uuid.UUID
     complaint_number: str

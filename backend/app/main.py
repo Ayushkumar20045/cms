@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, auth, complaints, locations, notifications, requirements, staff, students
+from app.api import admin, auth, board, complaints, locations, notifications, requirements, staff, students
 from app.authorization.deps import CSRF_HEADER
 from app.core.config import get_settings
 from app.responses import install_error_handlers
@@ -29,7 +29,7 @@ async def security_headers(request: Request, call_next):
     return response
 
 
-for r in (auth.router, students.router, complaints.router, locations.router, staff.router, requirements.router, notifications.router,
+for r in (auth.router, students.router, complaints.router, board.router, locations.router, staff.router, requirements.router, notifications.router,
           admin.router):
     app.include_router(r)
 
