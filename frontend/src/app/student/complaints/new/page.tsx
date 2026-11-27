@@ -171,6 +171,16 @@ function ComplaintIcon() {
   );
 }
 
+// The building list is grouped so people can find their school, hostel, quarters or office quickly
+const BUILDING_GROUPS: { label: string; types: string[] }[] = [
+  { label: "Schools and academic buildings", types: ["ACADEMIC"] },
+  { label: "Hostels", types: ["HOSTEL"] },
+  { label: "Faculty and staff housing", types: ["RESIDENTIAL"] },
+  { label: "Administration", types: ["ADMINISTRATIVE"] },
+  { label: "Library, health and sports", types: ["LIBRARY", "MEDICAL", "SPORTS"] },
+  { label: "Other campus places", types: ["UTILITY", "OTHER"] },
+];
+
 export default function RaiseComplaintPage() {
   const router = useRouter();
   const { user, signOut } = useSession("student");
@@ -694,11 +704,18 @@ export default function RaiseComplaintPage() {
                             <option value="">
                               {ownPlaceLabel ?? "Select building"}
                             </option>
-                            {buildings.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.name}
-                              </option>
-                            ))}
+                            {BUILDING_GROUPS.map((group) => {
+                              const items = buildings.filter((item) => group.types.includes(item.buildingType));
+                              return items.length ? (
+                                <optgroup key={group.label} label={group.label}>
+                                  {items.map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.name}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              ) : null;
+                            })}
                           </select>
                           <ChevronDownIcon />
                         </div>
