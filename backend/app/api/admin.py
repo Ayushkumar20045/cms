@@ -258,6 +258,15 @@ def _department_ok(db: Session, department_id: int | None, field: str = 'departm
         raise HTTPException(422, detail=[{'field': field, 'message': 'Unknown department'}])
 
 
+def _residence_ok(db: Session, building_id: int | None):
+    """A residence must be one of the campus quarters (a RESIDENTIAL building)."""
+    if building_id is None:
+        return
+    b = db.get(Building, building_id)
+    if b is None or not b.is_active or b.building_type != BuildingType.RESIDENTIAL:
+        raise HTTPException(422, detail=[{'field': 'residenceBuildingId', 'message': 'Choose one of the campus quarters'}])
+
+
 def _department_required(u: User):
     """Technicians, supervisors and department heads see work by department, so they must have one."""
     roles = u.role_names & DEPARTMENT_ROLES
@@ -273,7 +282,8 @@ def _revoke_sessions(db: Session, user_id: uuid.UUID):
 
 def _user_snapshot(u: User) -> dict:
     return {'email': u.email, 'name': u.full_name, 'roles': sorted(u.role_names), 'hostelId': u.hostel_id,
-            'roomNumber': u.room_number, 'block': u.block, 'departmentId': u.department_id}
+            'roomNumber': u.room_number, 'block': u.block, 'departmentId': u.department_id,
+            'residenceBuildingId': u.residence_building_id, 'residenceUnit': u.residence_unit}
 
 
 @router.get('/users', response_model=PageOf[UserOut])
@@ -308,9 +318,11 @@ def create_user(body: UserCreateIn, request: Request, db: Session = Depends(get_
         raise HTTPException(status.HTTP_409_CONFLICT, detail='That email is already registered')
     _hostel_ok(db, body.hostel_id)
     _department_ok(db, body.department_id)
+    _residence_ok(db, body.residence_building_id)
     u = User(login_id=body.login_id, email=email, password_hash=hash_password(body.password), first_name=body.first_name,
              last_name=body.last_name, phone=body.phone, hostel_id=body.hostel_id, room_number=body.room_number, block=body.block,
-             department_id=body.department_id, roles=_roles(db, body.roles, current))
+             department_id=body.department_id, residence_building_id=body.residence_building_id,
+             residence_unit=body.residence_unit, roles=_roles(db, body.roles, current))
     _department_required(u)
     db.add(u)
     db.flush()
@@ -334,6 +346,8 @@ def update_user(user_id: uuid.UUID, body: UserUpdateIn, request: Request, db: Se
         _hostel_ok(db, data['hostel_id'])
     if 'department_id' in data:
         _department_ok(db, data['department_id'])
+    if 'residence_building_id' in data:
+        _residence_ok(db, data['residence_building_id'])
     if data.get('email'):
         data['email'] = data['email'].lower()
         if db.scalar(select(User.id).where(func.lower(User.email) == data['email'], User.id != u.id)):

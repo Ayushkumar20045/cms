@@ -54,7 +54,8 @@ def categories(db: Session = Depends(get_db), _: CurrentUser = Depends(require_p
 
 def resolve_location(db: Session, user: User, building_id: int | None, room_id: int | None,
                      details: str) -> tuple[Building | None, Room | None, str | None, list[dict]]:
-    """Work out where the problem is. Without a building or room, a hostel resident's own hostel and room are used."""
+    """Work out where the problem is. Without a building or room, a hostel resident's own hostel and room are used, and
+    for faculty or staff living on campus, their quarters and house number."""
     errors, building, room = [], None, None
     if room_id is not None:
         room = db.get(Room, room_id)
@@ -74,6 +75,10 @@ def resolve_location(db: Session, user: User, building_id: int | None, room_id: 
             building = user.hostel.building
             if not details:
                 details = ', '.join(p for p in (user.block, f'Room {user.room_number}' if user.room_number else None) if p)
+        elif user.residence_building is not None and user.residence_building.is_active:
+            building = user.residence_building
+            if not details and user.residence_unit:
+                details = f'House {user.residence_unit}'
         else:
             errors.append({'field': 'buildingId', 'message': 'Please choose the building where the problem is.'})
     if len(details) > LOCATION_DETAILS_MAX:

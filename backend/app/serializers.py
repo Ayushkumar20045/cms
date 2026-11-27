@@ -2,7 +2,7 @@ from app.authorization.deps import CurrentUser, load_principal
 from app.authorization.scope import can_view, sees_internal
 from app.models import Building, CommentVisibility, Complaint, LinkType, Subtask, SubtaskStatus, User
 from app.schemas import (AssignmentOut, AttachmentOut, BuildingOut, CommentOut, ComplaintDetail, ComplaintSummary, DepartmentBrief,
-                         HistoryOut, HostelBrief, LabelOut, LinkedTicket, LinkOut, LocationOut, Me, SimilarComplaint, SubtaskOut,
+                         HistoryOut, HostelBrief, LabelOut, ResidenceBrief, LinkedTicket, LinkOut, LocationOut, Me, SimilarComplaint, SubtaskOut,
                          SubtaskProgress, UserBrief, UserOut, ZoneOut)
 from app.services.workflow import DECIDABLE, STAFF_SETTABLE, TRANSITIONS, is_overdue
 
@@ -13,6 +13,10 @@ def hostel_brief(h) -> HostelBrief | None:
 
 def department_brief(d) -> DepartmentBrief | None:
     return DepartmentBrief.model_validate(d) if d else None
+
+
+def residence_brief(b) -> ResidenceBrief | None:
+    return ResidenceBrief(id=b.id, code=b.code, name=b.name) if b else None
 
 
 def building_out(b: Building, hostel=None) -> BuildingOut:
@@ -37,14 +41,16 @@ def me(user: User) -> Me:
     return Me(id=user.id, login_id=user.login_id, email=user.email, first_name=user.first_name, last_name=user.last_name,
               full_name=user.full_name, phone=user.phone, status=user.status, roles=sorted(p.roles),
               permissions=sorted(p.permissions), hostel=hostel_brief(user.hostel), room_number=user.room_number, block=user.block,
-              department=department_brief(user.department))
+              department=department_brief(user.department), residence=residence_brief(user.residence_building),
+              residence_unit=user.residence_unit)
 
 
 def user_out(u: User) -> UserOut:
     return UserOut(id=u.id, login_id=u.login_id, email=u.email, first_name=u.first_name, last_name=u.last_name,
                    full_name=u.full_name, phone=u.phone, status=u.status, roles=sorted(u.role_names),
                    hostel=hostel_brief(u.hostel), room_number=u.room_number, block=u.block,
-                   department=department_brief(u.department), last_login_at=u.last_login_at, created_at=u.created_at)
+                   department=department_brief(u.department), residence=residence_brief(u.residence_building),
+                   residence_unit=u.residence_unit, last_login_at=u.last_login_at, created_at=u.created_at)
 
 
 def _assignee_label(c: Complaint) -> str | None:

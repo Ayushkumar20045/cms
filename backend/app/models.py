@@ -200,6 +200,9 @@ class User(Base):
     hostel_id: Mapped[int | None] = mapped_column(ForeignKey('hostels.id'), index=True)
     room_number: Mapped[str | None] = mapped_column(String(20))
     block: Mapped[str | None] = mapped_column(String(40))
+    # Faculty and staff living on campus: their quarters (a RESIDENTIAL building) and house or flat number
+    residence_building_id: Mapped[int | None] = mapped_column(ForeignKey('buildings.id'), index=True)
+    residence_unit: Mapped[str | None] = mapped_column(String(40))
     # Technicians, supervisors and department heads: the department they work in (also scopes what they see)
     department_id: Mapped[int | None] = mapped_column(ForeignKey('departments.id'), index=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -209,6 +212,7 @@ class User(Base):
     roles: Mapped[list[Role]] = relationship(secondary=user_roles, lazy='selectin')
     hostel: Mapped[Hostel | None] = relationship(lazy='joined')
     department: Mapped[Department | None] = relationship(lazy='joined')
+    residence_building: Mapped[Building | None] = relationship(lazy='joined', foreign_keys=[residence_building_id])
 
     @property
     def full_name(self) -> str:

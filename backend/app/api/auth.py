@@ -31,8 +31,9 @@ STAFF_PORTALS = [
     ('CARETAKER', 'caretaker', '/staff/caretaker/dashboard'),
     ('AUTHORITY', 'authority', '/staff/authority/dashboard'),
 ]
-# Faculty and non-teaching staff raise and track requests through the same portal as students
-REQUESTER_ROLES = {'STUDENT', 'FACULTY', 'STAFF'}
+# Faculty and non-teaching staff sign in through the Faculty tab; they raise and track requests on the same pages
+# as students
+FACULTY_ROLES = {'FACULTY', 'STAFF'}
 
 
 def portal_and_home(user: User) -> tuple[str, str | None, str]:
@@ -43,7 +44,9 @@ def portal_and_home(user: User) -> tuple[str, str | None, str]:
     for role, staff_role, home in STAFF_PORTALS:
         if role in roles:
             return 'staff', staff_role, home
-    if roles & REQUESTER_ROLES:
+    if roles & FACULTY_ROLES:
+        return 'faculty', None, '/student/dashboard'
+    if 'STUDENT' in roles:
         return 'student', None, '/student/dashboard'
     return 'none', None, '/'
 

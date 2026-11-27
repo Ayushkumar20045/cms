@@ -51,7 +51,7 @@ def test_faculty_reports_a_room_in_an_academic_building(admin):
     _, a = admin
     b, room = new_building(a)
     faculty = make_user(['FACULTY'], hostel_code=None)
-    fc = client_for(faculty, 'student')
+    fc = client_for(faculty, 'faculty')
     assert raise_complaint(fc).status_code == 422  # no hostel, so a building is required
     r = fc.post('/api/v1/complaints', data={'title': 'Projector not working', 'category': 'Electrical', 'roomId': room['id'],
                                             'locationDetails': 'Near the front desk'})
@@ -137,7 +137,18 @@ def test_new_hostel_gets_a_building(admin):
 
 def test_new_roles_land_in_the_right_portal():
     faculty = make_user(['FACULTY'], hostel_code=None)
-    assert client_for(faculty, 'student') is not None
+    assert client_for(faculty, 'faculty') is not None
+    # The Faculty and Student tabs are separate portals: each account signs in only through its own
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from tests.conftest import PASSWORD
+    r = TestClient(app).post('/api/v1/auth/login', json={'identifier': faculty.login_id, 'password': PASSWORD, 'portal': 'student'})
+    assert r.status_code == 403
+    student = make_user(['STUDENT'])
+    r = TestClient(app).post('/api/v1/auth/login', json={'identifier': student.login_id, 'password': PASSWORD, 'portal': 'faculty'})
+    assert r.status_code == 403
+    staff_member = make_user(['STAFF'], hostel_code=None)
+    assert client_for(staff_member, 'faculty').get('/api/v1/auth/me').json()['data']['roles'] == ['STAFF']
     sup = make_user(['SUPERVISOR'], hostel_code=None, department_id=dept_id('ELEC'))
     c = client_for(sup, 'staff', 'supervisor')
     assert c.get('/api/v1/auth/me').json()['data']['department']['code'] == 'ELEC'

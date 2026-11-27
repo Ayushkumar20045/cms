@@ -42,7 +42,7 @@ class PageOf(Camel, Generic[T]):
 
 
 # ---------------------------------------------------------------- auth
-Portal = Literal['student', 'staff', 'admin']
+Portal = Literal['student', 'faculty', 'staff', 'admin']
 
 
 class LoginIn(In):
@@ -65,6 +65,13 @@ class DepartmentBrief(Camel):
     name: str
 
 
+class ResidenceBrief(Camel):
+    """Faculty or staff quarters on campus."""
+    id: int
+    code: str
+    name: str
+
+
 class Me(Camel):
     id: uuid.UUID
     login_id: str
@@ -80,6 +87,8 @@ class Me(Camel):
     room_number: str | None
     block: str | None
     department: DepartmentBrief | None = None
+    residence: ResidenceBrief | None = None
+    residence_unit: str | None = None
 
 
 class LoginOut(Camel):
@@ -616,6 +625,8 @@ class UserOut(Camel):
     room_number: str | None
     block: str | None
     department: DepartmentBrief | None = None
+    residence: ResidenceBrief | None = None
+    residence_unit: str | None = None
     last_login_at: datetime | None
     created_at: datetime
 
@@ -632,6 +643,8 @@ class UserCreateIn(In):
     room_number: str | None = Field(default=None, max_length=20)
     block: str | None = Field(default=None, max_length=40)
     department_id: int | None = None
+    residence_building_id: int | None = None
+    residence_unit: str | None = Field(default=None, max_length=40)
 
 
 class UserUpdateIn(In):
@@ -644,6 +657,8 @@ class UserUpdateIn(In):
     room_number: str | None = Field(default=None, max_length=20)
     block: str | None = Field(default=None, max_length=40)
     department_id: int | None = None
+    residence_building_id: int | None = None
+    residence_unit: str | None = Field(default=None, max_length=40)
 
 
 class PasswordResetIn(In):

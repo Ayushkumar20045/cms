@@ -32,7 +32,8 @@ TYPE_KEYWORDS = [
     (BuildingType.MEDICAL, ('medical', 'health', 'hospital', 'dispensary', 'clinic')),
     (BuildingType.SPORTS, ('ground', 'stadium', 'sports', 'court', 'gym', 'pool', 'field')),
     (BuildingType.ADMINISTRATIVE, ('administrative', 'admin block', 'administration', 'registrar', 'office')),
-    (BuildingType.RESIDENTIAL, ('quarters', 'residential', 'guest house', 'faculty housing')),
+    (BuildingType.RESIDENTIAL, ('quarters', 'quarter', 'residential', 'residence', 'guest house', 'housing', 'flats',
+                                'apartment', 'bungalow', 'villa', 'colony')),
     (BuildingType.UTILITY, ('substation', 'pump', 'water tank', 'generator', 'utility', 'workshop')),
     (BuildingType.ACADEMIC, ('school of', 'department', 'academic', 'lecture', 'laboratory', ' lab', 'block')),
 ]
