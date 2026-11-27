@@ -1,12 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-
 import { RecurringIssues } from "@/components/complaints/recurring-issues";
 import { DecisionNote, RequestActions } from "@/components/complaints/request-actions";
 import { StaffStatusBadge } from "@/components/staff/status-badge";
-import { UserMenu } from "@/components/student/user-menu";
+import { SidebarIcon, WardenShell } from "@/components/staff/warden-shell";
 import { staff as staffApi } from "@/lib/api/endpoints";
 import { useLoad, useSession } from "@/lib/session";
 import { staffRow } from "@/lib/staff";
@@ -96,280 +94,7 @@ function StatIcon({ type }: { type: DashboardStat["icon"] }) {
   );
 }
 
-function SidebarIcon({
-  type,
-}: {
-  type:
-    | "dashboard"
-    | "requirements"
-    | "escalations"
-    | "students"
-    | "hostel"
-    | "history";
-}) {
-  const common = {
-    "aria-hidden": true,
-    viewBox: "0 0 24 24",
-    fill: "none",
-    className: "h-4.5 w-4.5",
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-  };
-
-  if (type === "dashboard") {
-    return (
-      <svg {...common}>
-        <rect x="4" y="4" width="6" height="6" rx="1" />
-        <rect x="14" y="4" width="6" height="6" rx="1" />
-        <rect x="4" y="14" width="6" height="6" rx="1" />
-        <rect x="14" y="14" width="6" height="6" rx="1" />
-      </svg>
-    );
-  }
-
-  if (type === "requirements") {
-    return (
-      <svg {...common}>
-        <path
-          d="M4.5 7.5h15v12h-15z"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M8 7.5V5.8A1.8 1.8 0 0 1 9.8 4h4.4A1.8 1.8 0 0 1 16 5.8v1.7M4.5 11h15"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path d="M10 15h4" strokeLinecap="round" />
-      </svg>
-    );
-  }
-
-  if (type === "escalations") {
-    return (
-      <svg {...common}>
-        <path
-          d="m12 4 7 16H5L12 4Z"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path d="M12 9v4M12 16h.01" strokeLinecap="round" />
-      </svg>
-    );
-  }
-
-  if (type === "students") {
-    return (
-      <svg {...common}>
-        <circle cx="12" cy="8" r="3" />
-        <path
-          d="M5.5 20a6.5 6.5 0 0 1 13 0M4 6.5 12 3l8 3.5L12 10 4 6.5Z"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
-  }
-
-  if (type === "hostel") {
-    return (
-      <svg {...common}>
-        <path
-          d="M4 20V6.5L12 3l8 3.5V20"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M8 20v-5h8v5M8 9h2M14 9h2M8 12h2M14 12h2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
-  }
-
-  return (
-    <svg {...common}>
-      <path
-        d="M5 5h14v14H5z"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <path d="M8 9h8M8 12h8M8 15h5" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function MenuIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      fill="none"
-      className="h-5 w-5"
-      stroke="currentColor"
-      strokeWidth="1.8"
-    >
-      <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      fill="none"
-      className="h-5 w-5"
-      stroke="currentColor"
-      strokeWidth="1.8"
-    >
-      <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-const mainNavigation = [
-  {
-    label: "Dashboard",
-    href: "/staff/warden/dashboard",
-    icon: "dashboard" as const,
-    active: true,
-  },
-  {
-    label: "Ticket Board",
-    href: "/board",
-    icon: "dashboard" as const,
-    active: false,
-  },
-  {
-    label: "Requirements",
-    href: "/staff/requirements",
-    icon: "requirements" as const,
-    active: false,
-  },
-  {
-    label: "Escalations",
-    href: "/staff/escalations",
-    icon: "escalations" as const,
-    active: false,
-  },
-];
-
-const managementNavigation = [
-  {
-    label: "Students",
-    href: "/staff/students",
-    icon: "students" as const,
-  },
-  {
-    label: "Hostel",
-    href: "/staff/hostel",
-    icon: "hostel" as const,
-  },
-  {
-    label: "Complaint History",
-    href: "/staff/history",
-    icon: "history" as const,
-  },
-];
-
-function Navigation({
-  mobile = false,
-  onNavigate,
-}: {
-  mobile?: boolean;
-  onNavigate?: () => void;
-}) {
-  return (
-    <nav className="flex-1 overflow-y-auto px-3 py-5">
-      <p className="px-3 pb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-        Main
-      </p>
-
-      <div className="space-y-1">
-        {mainNavigation.map((item) => (
-          <Link
-            key={item.label}
-            href={item.href}
-            onClick={onNavigate}
-            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-              item.active
-                ? "bg-[#f8e9ef] text-[#a5174d]"
-                : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-            }`}
-          >
-            <SidebarIcon type={item.icon} />
-            <span>{item.label}</span>
-          </Link>
-        ))}
-      </div>
-
-      <p className="px-3 pb-2 pt-7 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-        Management
-      </p>
-
-      <div className="space-y-1">
-        {managementNavigation.map((item) => (
-          <Link
-            key={item.label}
-            href={item.href}
-            onClick={onNavigate}
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
-          >
-            <SidebarIcon type={item.icon} />
-            <span>{item.label}</span>
-          </Link>
-        ))}
-      </div>
-    </nav>
-  );
-}
-
-function SidebarHeader({ mobile = false }: { mobile?: boolean }) {
-  return (
-    <div
-      className={`flex items-center gap-3 border-b border-slate-100 ${
-        mobile ? "h-20 px-5" : "h-20 px-6"
-      }`}
-    >
-      <div
-        className={`flex items-center justify-center overflow-hidden ${
-          mobile ? "h-9 w-9" : "h-10 w-10"
-        }`}
-      >
-        <img
-          src="/images/gbu-logo.png"
-          alt="GBU"
-          className={mobile ? "h-full w-full object-contain" : "h-full w-full object-contain"}
-        />
-      </div>
-
-      <div className="min-w-0">
-        <p className="truncate text-sm font-bold text-slate-900">GBU Portal</p>
-        <p className="truncate text-xs text-slate-500">Hostel Services</p>
-      </div>
-    </div>
-  );
-}
-
-function SignedInCard({ hostel }: { hostel: string | null }) {
-  return (
-    <div className="rounded-xl bg-[#fdf3f7] px-3.5 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#a5174d]">
-        Signed in as
-      </p>
-      <p className="mt-1 text-sm font-bold text-slate-900">Warden</p>
-      <p className="mt-0.5 text-xs text-slate-500">
-        {hostel ?? "No hostel assigned"}
-      </p>
-    </div>
-  );
-}
-
 export default function WardenDashboard() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { user, signOut } = useSession("warden");
   const ready = Boolean(user);
   const dashboard = useLoad(() => (ready ? staffApi.dashboard() : Promise.resolve(null)), [ready]);
@@ -391,78 +116,7 @@ export default function WardenDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#f7f7f8] text-slate-900">
-      <div className="flex min-h-screen">
-        <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
-          <SidebarHeader />
-
-          <div className="border-b border-slate-100 px-4 py-4">
-            <SignedInCard hostel={hostelName} />
-          </div>
-
-          <Navigation />
-        </aside>
-
-        {mobileMenuOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <button
-              type="button"
-              aria-label="Close menu"
-              onClick={() => setMobileMenuOpen(false)}
-              className="absolute inset-0 bg-slate-900/30"
-            />
-
-            <aside className="relative flex h-full w-[280px] flex-col bg-white shadow-xl">
-              <div className="flex items-center justify-between border-b border-slate-100">
-                <SidebarHeader mobile />
-
-                <button
-                  type="button"
-                  onClick={() => setMobileMenuOpen(false)}
-                  aria-label="Close navigation"
-                  className="mr-3 rounded-lg p-2 text-slate-500 hover:bg-slate-100"
-                >
-                  <CloseIcon />
-                </button>
-              </div>
-
-              <div className="px-3 pt-5">
-                <SignedInCard hostel={hostelName} />
-              </div>
-
-              <Navigation
-                mobile
-                onNavigate={() => setMobileMenuOpen(false)}
-              />
-            </aside>
-          </div>
-        )}
-
-        <main className="min-w-0 flex-1">
-          <header className="flex h-20 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                aria-label="Open navigation"
-                onClick={() => setMobileMenuOpen(true)}
-                className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
-              >
-                <MenuIcon />
-              </button>
-
-              <div>
-                <p className="text-xs font-medium text-slate-500">
-                  Hostel Services
-                </p>
-                <h1 className="text-sm font-bold text-slate-900">
-                  Warden Portal
-                </h1>
-              </div>
-            </div>
-
-            <UserMenu user={user} roleLabel="Warden" onSignOut={signOut} />
-          </header>
-
+    <WardenShell user={user} signOut={signOut} hostelName={hostelName}>
           <div className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8 lg:py-8">
             <section className="mb-7 flex flex-col justify-between gap-5 md:flex-row md:items-end">
               <div>
@@ -479,7 +133,7 @@ export default function WardenDashboard() {
               </div>
 
               <Link
-                href="/staff/complaints"
+                href="/staff/warden/complaints"
                 className="inline-flex h-10 items-center justify-center rounded-lg bg-[#a5174d] px-5 text-sm font-semibold text-white transition-colors hover:bg-[#8e123f]"
               >
                 View Complaints
@@ -532,7 +186,7 @@ export default function WardenDashboard() {
                   </div>
 
                   <Link
-                    href="/staff/complaints"
+                    href="/staff/warden/complaints"
                     className="text-xs font-semibold text-[#a5174d] hover:text-[#8e123f]"
                   >
                     View all
@@ -680,7 +334,7 @@ export default function WardenDashboard() {
 
                   <div className="mt-4 space-y-2.5">
                     <Link
-                      href="/staff/complaints"
+                      href="/staff/warden/complaints"
                       className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 transition-colors hover:border-[#e9c5d3] hover:bg-[#fdf8fa]"
                     >
                       <div>
@@ -697,7 +351,7 @@ export default function WardenDashboard() {
                     </Link>
 
                     <Link
-                      href="/staff/requirements"
+                      href="/staff/warden/requirements"
                       className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 transition-colors hover:border-[#e9c5d3] hover:bg-[#fdf8fa]"
                     >
                       <div>
@@ -714,7 +368,7 @@ export default function WardenDashboard() {
                     </Link>
 
                     <Link
-                      href="/staff/escalations"
+                      href="/staff/warden/escalations"
                       className="flex items-center justify-between rounded-xl border border-slate-200 px-4 py-3 transition-colors hover:border-[#e9c5d3] hover:bg-[#fdf8fa]"
                     >
                       <div>
@@ -792,8 +446,6 @@ export default function WardenDashboard() {
               </aside>
             </section>
           </div>
-        </main>
-      </div>
-    </div>
+    </WardenShell>
   );
 }

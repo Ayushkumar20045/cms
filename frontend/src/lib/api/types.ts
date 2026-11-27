@@ -325,6 +325,45 @@ export interface BuildingSummary {
   recent: ComplaintSummary[];
 }
 
+/** A student living in the warden's hostel */
+export interface HostelStudent {
+  id: string;
+  fullName: string;
+  loginId: string;
+  email: string | null;
+  phone: string | null;
+  block: string | null;
+  roomNumber: string | null;
+  status: "ACTIVE" | "INACTIVE";
+  openComplaints: number;
+  totalComplaints: number;
+}
+
+export interface StaffContact {
+  id: string;
+  fullName: string;
+  email: string | null;
+  phone: string | null;
+}
+
+/** The warden's own hostel */
+export interface WardenHostel {
+  hostel: HostelBrief;
+  buildingName: string | null;
+  onMap: boolean;
+  capacity: number | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  students: number;
+  openComplaints: number;
+  resolvedComplaints: number;
+  totalComplaints: number;
+  wardens: StaffContact[];
+  caretakers: StaffContact[];
+  byCategory: { name: string; count: number }[];
+  byStatus: { name: string; count: number }[];
+}
+
 export interface StaffDashboard {
   counts: {
     total: number;

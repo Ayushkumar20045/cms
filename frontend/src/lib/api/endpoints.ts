@@ -1,6 +1,8 @@
 import { api, apiPage } from "./client";
 import type {
   Activity,
+  HostelStudent,
+  WardenHostel,
   AdminDashboard,
   AdminHostel,
   AdminUser,
@@ -116,6 +118,12 @@ export const staff = {
 
   /** Problems reported again and again within the signed-in user's hostel, department or (admins) campus */
   recurring: () => api<RecurringIssue[]>("/staff/me/recurring"),
+
+  /** Wardens: students living in their hostel */
+  students: (search?: string) => api<HostelStudent[]>("/staff/me/students", { query: { search } }),
+
+  /** Wardens: their hostel's details, staff and complaint counts */
+  hostel: () => api<WardenHostel>("/staff/me/hostel"),
 };
 
 export const locations = {
