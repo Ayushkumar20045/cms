@@ -1,7 +1,7 @@
 """Idempotent seed: permission catalogue, roles, starter hostels, departments and categories, and development accounts.
 
 Run with `python -m app.seed`. Existing rows are updated in place; existing users are never overwritten.
-Hostels and departments are starter examples to be replaced with GBU's real lists. Other campus buildings are
+Hostels are GBU's hostels as drawn on the campus map; departments are starter examples. Other campus buildings are
 not seeded: they come from the GBU campus GIS data or are added by an administrator.
 """
 import os
@@ -14,7 +14,24 @@ from app.core.security import hash_password
 from app.db import SessionLocal
 from app.models import Building, BuildingType, Category, Complaint, Department, Hostel, Permission, Role, User
 
-HOSTELS = [('GBH', 'Gautam Buddha Hostel'), ('ASH', 'Ashoka Hostel'), ('AMB', 'Ambedkar Hostel')]
+# GBU hostels, with the names used on the campus map (GBU_Map_marked.geojson). Codes match the map import.
+HOSTELS = [
+    ('VALMIKI-HOSTEL', 'Valmiki Hostel'),
+    ('RAHEEM-DAS-BOYS-HOSTEL', 'Raheem Das Boys Hostel'),
+    ('MMJ-BOYS-HOSTEL', 'MMJ Boys Hostel'),
+    ('MUNSI-PREMCHANDRA-BOYS-HOSTEL', 'Munsi PremChandra Boys Hostel'),
+    ('GURU-GHASI-DAS-BOYS-HOSTEL', 'Guru Ghasi Das Boys Hostel'),
+    ('RAM-SHARAN-BOYS-HOSTEL', 'Ram Sharan Boys Hostel'),
+    ('SHREE-NARAYAN-GURU-BOYS-HOSTEL', 'Shree Narayan Guru Boys Hostel'),
+    ('TULSIDAS-BOYS-HOSTEL', 'Tulsidas Boys Hostel'),
+    ('BIRSA-MUNDA-BOYS-HOSTEL', 'Birsa Munda Boys Hostel'),
+    ('RAVIDAS-BOYS-HOSTEL', 'Ravidas Boys Hostel'),
+    ('SANT-KABIR-DAS-BOYS-HOSTEL', 'Sant Kabir Das Boys Hostel'),
+    ('CHATRAPATI-SAHUJI-MAHARAJ-GIRL', 'Chatrapati Sahuji Maharaj Girls Hostel'),
+    ('MAHADEVI-VERMA-GIRLS-BOYS-HOST', 'Mahadevi Verma Girls Boys Hostel'),
+    ('SAVITRI-BAI-GIRLS-HOSTEL', 'Savitri Bai Girls Hostel'),
+]
+DEMO_HOSTEL = 'VALMIKI-HOSTEL'
 DEPARTMENTS = [
     ('ELEC', 'Electrical Maintenance', 'Wiring, lights, fans, sockets and power supply'),
     ('CIVIL', 'Civil and Plumbing', 'Building repairs, water supply, drainage and plumbing'),
@@ -108,9 +125,9 @@ def main() -> None:
         seed_reference(db)
         seed_user(db, 'SUPER_ADMIN', 'Super', 'Admin', ['SUPER_ADMIN'])
         seed_user(db, 'ADMIN', 'System', 'Administrator', ['ADMIN'])
-        seed_user(db, 'STUDENT', 'Demo', 'Student', ['STUDENT'], 'GBH', 'B-204', 'Block B')
-        seed_user(db, 'WARDEN', 'Demo', 'Warden', ['WARDEN'], 'GBH')
-        seed_user(db, 'CARETAKER', 'Demo', 'Caretaker', ['CARETAKER'], 'GBH')
+        seed_user(db, 'STUDENT', 'Demo', 'Student', ['STUDENT'], DEMO_HOSTEL, 'B-204', 'Block B')
+        seed_user(db, 'WARDEN', 'Demo', 'Warden', ['WARDEN'], DEMO_HOSTEL)
+        seed_user(db, 'CARETAKER', 'Demo', 'Caretaker', ['CARETAKER'], DEMO_HOSTEL)
         # Campus-wide roles; each is created only if its SEED_<ROLE>_LOGIN_ID / _PASSWORD are set in .env
         seed_user(db, 'FACULTY', 'Demo', 'Faculty', ['FACULTY'])
         seed_user(db, 'STAFF', 'Demo', 'Staff', ['STAFF'])

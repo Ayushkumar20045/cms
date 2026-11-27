@@ -7,9 +7,9 @@ def test_warden_dashboard_is_scoped_to_their_hostel(student):
     d = raise_complaint(c).json()['data']
     warden = client_for(make_user(['WARDEN']), 'staff', 'warden')
     data = warden.get('/api/v1/staff/me/dashboard').json()['data']
-    assert data['hostel']['hostel']['name'] == 'Gautam Buddha Hostel' and data['hostel']['students'] >= 1
+    assert data['hostel']['hostel']['name'] == 'Valmiki Hostel' and data['hostel']['students'] >= 1
     assert data['counts']['pending'] >= 1 and any(r['id'] == d['id'] for r in data['recent'])
-    other = client_for(make_user(['WARDEN'], hostel_code='ASH'), 'staff', 'warden')
+    other = client_for(make_user(['WARDEN'], hostel_code='TULSIDAS-BOYS-HOSTEL'), 'staff', 'warden')
     assert all(r['id'] != d['id'] for r in other.get('/api/v1/staff/me/dashboard').json()['data']['recent'])
 
 

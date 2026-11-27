@@ -53,7 +53,7 @@ def clean_redis():
     yield
 
 
-def make_user(roles: list[str], hostel_code: str | None = 'GBH', **extra) -> User:
+def make_user(roles: list[str], hostel_code: str | None = 'VALMIKI-HOSTEL', **extra) -> User:
     with SessionLocal() as db:
         hostel = db.scalar(select(Hostel).where(Hostel.code == hostel_code)) if hostel_code else None
         u = User(login_id=f'T-{secrets.token_hex(4)}', password_hash=hash_password(PASSWORD), first_name='Test',

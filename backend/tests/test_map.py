@@ -18,7 +18,7 @@ def campus_file(tag: str) -> dict:
         feature(square(77.515, 28.412, 0.02), name='Gautam Buddha University'),
         feature(square(77.520, 28.415, 0.0005), name=f'School of Testing {tag}'),
         feature(square(77.522, 28.416, 0.0004), name=f'Test Library {tag}', code=f'LIB-{tag}'),
-        feature(square(77.524, 28.417, 0.0004), name='Gautam Buddha Hostel'),
+        feature(square(77.524, 28.417, 0.0004), name='Valmiki Hostel'),
         feature(square(77.526, 28.418, 0.0003)),
         feature({'type': 'Point', 'coordinates': [77.52, 28.42]}, name='A point'),
     ]}
@@ -42,7 +42,7 @@ def test_import_preview_then_apply_then_reimport(admin):
     assert f'School of Testing {tag} [SCHOOL-OF-TESTING-{tag}, ACADEMIC]' in created
     assert f'LIB-{tag}, LIBRARY' in created
     # The hostel polygon becomes the existing hostel's building rather than a new one
-    assert any(u.startswith('Gautam Buddha Hostel') for u in r['updated'])
+    assert any(u.startswith('Valmiki Hostel') for u in r['updated'])
     assert any('no name' in s for s in r['skipped']) and any('Point' in s for s in r['skipped'])
 
     again = upload(a, data).json()['data']
@@ -54,7 +54,7 @@ def test_map_shows_buildings_and_counts_only_visible_requests(student, admin):
     _, a = admin
     upload(a, campus_file(secrets.token_hex(3).upper()))
     raise_complaint(sc)  # lands in the student's hostel building
-    hostel = next(b for b in sc.get('/api/v1/map').json()['data']['buildings'] if b['name'] == 'Gautam Buddha Hostel')
+    hostel = next(b for b in sc.get('/api/v1/map').json()['data']['buildings'] if b['name'] == 'Valmiki Hostel')
     assert hostel['openRequests'] >= 1 and hostel['geometry']['type'] == 'Polygon'
     other = make_user(['STUDENT'])
     other_view = next(b for b in client_for(other, 'student').get('/api/v1/map').json()['data']['buildings']

@@ -27,7 +27,7 @@ def notifications_of(user, kind=None):
         return list(db.scalars(stmt.order_by(Notification.id)))
 
 
-def hostel_staff(code='GBH'):
+def hostel_staff(code='VALMIKI-HOSTEL'):
     """A fresh caretaker (with email) and warden for a hostel."""
     import secrets
     caretaker = make_user(['CARETAKER'], hostel_code=code, email=f'ct-{secrets.token_hex(3)}@demo.gbu.local')
@@ -96,7 +96,7 @@ def test_only_responsible_staff_can_accept_or_reject(student):
     hostel_staff()
     d = raise_complaint(sc, title='Broken window latch here').json()['data']
     assert sc.post(f"/api/v1/complaints/{d['id']}/accept", json={}).status_code == 403
-    other_hostel_caretaker = make_user(['CARETAKER'], hostel_code='ASH')
+    other_hostel_caretaker = make_user(['CARETAKER'], hostel_code='TULSIDAS-BOYS-HOSTEL')
     r = client_for(other_hostel_caretaker, 'staff', 'caretaker').post(f"/api/v1/complaints/{d['id']}/accept", json={})
     assert r.status_code == 404  # outside their hostel: not even disclosed
     technician = make_user(['TECHNICIAN'], hostel_code=None)
@@ -169,7 +169,7 @@ def test_notifications_are_private(student):
     ('CARETAKER', 'caretaker', '/staff/caretaker/dashboard'),
 ])
 def test_every_staff_role_can_sign_in_to_its_portal(role, staff_role, home):
-    u = make_user([role], hostel_code='GBH' if role in ('WARDEN', 'CARETAKER') else None)
+    u = make_user([role], hostel_code='VALMIKI-HOSTEL' if role in ('WARDEN', 'CARETAKER') else None)
     r = TestClient(app).post('/api/v1/auth/login', json={'identifier': u.login_id, 'password': PASSWORD, 'portal': 'staff',
                                                          'staffRole': staff_role})
     assert r.status_code == 200, r.text

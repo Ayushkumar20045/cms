@@ -2,7 +2,7 @@
 from tests.conftest import client_for, make_user, raise_complaint
 
 
-def warden_client(hostel='GBH'):
+def warden_client(hostel='VALMIKI-HOSTEL'):
     u = make_user(['WARDEN'], hostel_code=hostel)
     return u, client_for(u, 'staff', 'warden')
 
@@ -36,7 +36,7 @@ def test_labels_add_remove_and_board_filter(student):
 
 def test_organising_is_scoped(student):
     _, sc = student
-    _, other_warden = warden_client('ASH')
+    _, other_warden = warden_client('TULSIDAS-BOYS-HOSTEL')
     d = raise_complaint(sc).json()['data']
     assert other_warden.post(f"/api/v1/complaints/{d['id']}/labels", json={'name': 'urgent'}).status_code == 404
     caretaker = client_for(make_user(['CARETAKER']), 'staff', 'caretaker')
@@ -81,7 +81,7 @@ def test_links_to_hidden_tickets_stay_hidden(student):
     admin_user = make_user(['ADMIN'], hostel_code=None)
     a_client = client_for(admin_user, 'admin')
     mine = raise_complaint(sc).json()['data']
-    other_student = client_for(make_user(['STUDENT'], hostel_code='ASH'), 'student')
+    other_student = client_for(make_user(['STUDENT'], hostel_code='TULSIDAS-BOYS-HOSTEL'), 'student')
     elsewhere = raise_complaint(other_student, title='Lift stuck in Ashoka hostel').json()['data']
 
     # The warden cannot link to a ticket outside their hostel ...

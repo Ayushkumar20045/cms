@@ -14,7 +14,7 @@ def test_admin_dashboard_counts_and_recent(student, admin):
     after = a.get('/api/v1/admin/dashboard').json()['data']
     assert after['counts']['total'] == before['total'] + 1 and after['counts']['pending'] == before['pending'] + 1
     assert after['recentComplaints'][0]['student']['loginId']
-    assert any(h['hostel'] == 'Gautam Buddha Hostel' for h in after['byHostel'])
+    assert any(h['hostel'] == 'Valmiki Hostel' for h in after['byHostel'])
 
 
 def test_admin_list_search_and_pagination(student, admin):
@@ -31,7 +31,7 @@ def test_assignment_respects_hostel_and_moves_status(student, admin):
     _, c = student
     _, a = admin
     d = raise_complaint(c).json()['data']
-    other_hostel = make_user(['CARETAKER'], hostel_code='ASH')
+    other_hostel = make_user(['CARETAKER'], hostel_code='TULSIDAS-BOYS-HOSTEL')
     r = a.post(f"/api/v1/admin/complaints/{d['id']}/assign", json={'assigneeId': str(other_hostel.id)})
     assert r.status_code == 422
     caretaker = make_user(['CARETAKER'])
@@ -98,7 +98,7 @@ def test_admin_cannot_create_or_promote_administrators(admin):
 def test_admin_creates_student_who_can_sign_in(admin):
     _, a = admin
     hostels = a.get('/api/v1/admin/hostels').json()['data']
-    gbh = next(h for h in hostels if h['code'] == 'GBH')
+    gbh = next(h for h in hostels if h['code'] == 'VALMIKI-HOSTEL')
     body = {'loginId': '235UCD777', 'password': 'a-long-password-2', 'firstName': 'Asha', 'lastName': 'Verma',
             'roles': ['student'], 'hostelId': gbh['id'], 'roomNumber': 'A-101', 'block': 'Block A'}
     r = a.post('/api/v1/admin/users', json=body)

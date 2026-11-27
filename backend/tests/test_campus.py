@@ -41,8 +41,8 @@ def test_every_hostel_is_a_building():
 def test_hostel_request_defaults_to_own_hostel_and_routes_to_department(student):
     _, c = student
     d = raise_complaint(c, category='Electrical').json()['data']
-    assert d['location']['building']['name'] == 'Gautam Buddha Hostel'
-    assert d['location']['label'] == 'Gautam Buddha Hostel, Block B, Room B-204'
+    assert d['location']['building']['name'] == 'Valmiki Hostel'
+    assert d['location']['label'] == 'Valmiki Hostel, Block B, Room B-204'
     assert d['department']['code'] == 'ELEC'
     assert d['requester'] == d['student']
 
@@ -96,8 +96,8 @@ def test_supervisor_assigns_only_technicians_of_their_department(student):
 def test_warden_cannot_assign_another_hostels_request(student):
     _, c = student
     d = raise_complaint(c).json()['data']
-    warden = make_user(['WARDEN'], hostel_code='ASH')
-    caretaker = make_user(['CARETAKER'], hostel_code='GBH')
+    warden = make_user(['WARDEN'], hostel_code='TULSIDAS-BOYS-HOSTEL')
+    caretaker = make_user(['CARETAKER'], hostel_code='VALMIKI-HOSTEL')
     r = client_for(warden, 'staff', 'warden').post(f"/api/v1/admin/complaints/{d['id']}/assign",
                                                     json={'assigneeId': str(caretaker.id)})
     assert r.status_code == 404

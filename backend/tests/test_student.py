@@ -13,7 +13,7 @@ def test_student_raises_complaint_with_server_generated_id_and_hostel(student):
     d = r.json()['data']
     assert re.fullmatch(r'CMP-\d{4}-\d{4}', d['complaintNumber'])
     assert d['status'] == 'SUBMITTED' and d['category'] == 'Electrical'
-    assert d['hostel']['code'] == 'GBH'  # derived from the account, not chosen by the student
+    assert d['hostel']['code'] == 'VALMIKI-HOSTEL'  # derived from the account, not chosen by the student
     assert [h['newStatus'] for h in d['history']] == ['SUBMITTED']
     assert d['assignedTo'] is not None  # routed to a hostel warden
     assert warden.hostel_id == u.hostel_id
@@ -24,7 +24,7 @@ def test_student_cannot_choose_hostel_status_or_owner(student):
     r = c.post('/api/v1/complaints', data={'title': 'Leaking tap in washroom', 'category': 'Maintenance', 'status': 'RESOLVED',
                                            'hostelId': '999', 'studentId': 'someone-else'})
     assert r.status_code == 201
-    assert r.json()['data']['status'] == 'SUBMITTED' and r.json()['data']['hostel']['code'] == 'GBH'
+    assert r.json()['data']['status'] == 'SUBMITTED' and r.json()['data']['hostel']['code'] == 'VALMIKI-HOSTEL'
 
 
 def test_complaint_validation_errors(student):
@@ -78,7 +78,7 @@ def test_dashboard_profile_counts_and_list_filters(student):
     raise_complaint(c, title='Ethernet port dead in room', category='Ethernet')
     p = c.get('/api/v1/students/me').json()['data']
     assert p['summary'] == {'total': 2, 'active': 2, 'resolved': 0}
-    assert p['user']['roomNumber'] == 'B-204' and p['user']['hostel']['name'] == 'Gautam Buddha Hostel'
+    assert p['user']['roomNumber'] == 'B-204' and p['user']['hostel']['name'] == 'Valmiki Hostel'
     page = c.get('/api/v1/students/me/complaints', params={'category': 'Ethernet'}).json()
     assert page['pagination']['total'] == 1 and page['data'][0]['category'] == 'Ethernet'
     assert c.get('/api/v1/students/me/complaints', params={'search': 'cooler'}).json()['pagination']['total'] == 1
