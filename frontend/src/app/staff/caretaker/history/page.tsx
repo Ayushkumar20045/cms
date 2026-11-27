@@ -3,147 +3,77 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-type Category =
-  | "Electrical"
-  | "Plumbing"
-  | "Maintenance"
-  | "Furniture"
-  | "Cleaning";
+import { UserMenu } from "@/components/student/user-menu";
+import { complaints as complaintsApi } from "@/lib/api/endpoints";
+import type { ComplaintSummary, CurrentUser } from "@/lib/api/types";
+import { formatDate } from "@/lib/format";
+import { useLoad, useSession } from "@/lib/session";
+import { staffRow } from "@/lib/staff";
 
 interface WorkRecord {
   id: string;
   complaintId: string;
+  requester: string;
   description: string;
-  category: Category;
+  category: string;
   room: string;
   completedOn: string;
-  material: string;
-  quantity: number;
-  materialCost: number;
-  otherCost: number;
-  totalCost: number;
-  vendor: string;
-  billNumber: string;
-  remarks: string;
+  completedAt: Date;
+  material: string | null;
+  quantity: number | null;
+  materialCost: number | null;
+  otherCost: number | null;
+  totalCost: number | null;
+  vendor: string | null;
+  billNumber: string | null;
+  remarks: string | null;
 }
 
-const workRecords: WorkRecord[] = [
-  {
-    id: "WRK-2026-0024",
-    complaintId: "CMP-2026-0134",
-    description: "LED tube light replacement",
-    category: "Electrical",
-    room: "A-102",
-    completedOn: "02 Oct 2026",
-    material: "LED Tube Light",
-    quantity: 1,
-    materialCost: 420,
-    otherCost: 0,
-    totalCost: 420,
-    vendor: "GBU Electrical Store",
-    billNumber: "BILL-1024",
-    remarks: "Old tube light replaced and tested successfully.",
-  },
-  {
-    id: "WRK-2026-0023",
-    complaintId: "CMP-2026-0125",
-    description: "Washroom tap replacement",
-    category: "Plumbing",
-    room: "B-306",
-    completedOn: "01 Oct 2026",
-    material: "Brass Tap",
-    quantity: 1,
-    materialCost: 680,
-    otherCost: 0,
-    totalCost: 680,
-    vendor: "GBU Maintenance Store",
-    billNumber: "BILL-1021",
-    remarks: "Damaged tap replaced and water leakage checked.",
-  },
-  {
-    id: "WRK-2026-0022",
-    complaintId: "CMP-2026-0119",
-    description: "Door lock replacement",
-    category: "Maintenance",
-    room: "A-307",
-    completedOn: "30 Sep 2026",
-    material: "Heavy Duty Door Lock",
-    quantity: 1,
-    materialCost: 750,
-    otherCost: 100,
-    totalCost: 850,
-    vendor: "GBU Hardware Store",
-    billNumber: "BILL-1018",
-    remarks: "Faulty lock replaced and door alignment checked.",
-  },
-  {
-    id: "WRK-2026-0021",
-    complaintId: "CMP-2026-0108",
-    description: "Study table repair",
-    category: "Furniture",
-    room: "B-211",
-    completedOn: "28 Sep 2026",
-    material: "Wood Repair Kit",
-    quantity: 1,
-    materialCost: 250,
-    otherCost: 100,
-    totalCost: 350,
-    vendor: "Hostel Workshop",
-    billNumber: "INT-0094",
-    remarks: "Damaged table leg repaired and reinforced.",
-  },
-  {
-    id: "WRK-2026-0020",
-    complaintId: "CMP-2026-0097",
-    description: "Bathroom pipe replacement",
-    category: "Plumbing",
-    room: "A-118",
-    completedOn: "25 Sep 2026",
-    material: "PVC Water Pipe",
-    quantity: 4,
-    materialCost: 950,
-    otherCost: 300,
-    totalCost: 1250,
-    vendor: "GBU Plumbing Store",
-    billNumber: "BILL-1009",
-    remarks: "Damaged pipe section replaced and pressure tested.",
-  },
-  {
-    id: "WRK-2026-0019",
-    complaintId: "CMP-2026-0089",
-    description: "Window handle replacement",
-    category: "Maintenance",
-    room: "B-104",
-    completedOn: "23 Sep 2026",
-    material: "Window Handle",
-    quantity: 2,
-    materialCost: 280,
-    otherCost: 0,
-    totalCost: 280,
-    vendor: "GBU Hardware Store",
-    billNumber: "BILL-1005",
-    remarks: "Two damaged handles replaced.",
-  },
-];
+function toRecord(c: ComplaintSummary): WorkRecord {
+  const row = staffRow(c);
+  return {
+    id: c.id,
+    complaintId: c.complaintNumber,
+    requester: row.student,
+    description: c.title,
+    category: c.category,
+    room: row.place,
+    completedOn: formatDate(c.updatedAt),
+    completedAt: new Date(c.updatedAt),
+    material: null,
+    quantity: null,
+    materialCost: null,
+    otherCost: null,
+    totalCost: null,
+    vendor: null,
+    billNumber: null,
+    remarks: null,
+  };
+}
 
-const categories: Array<"All" | Category> = [
-  "All",
-  "Electrical",
-  "Plumbing",
-  "Maintenance",
-  "Furniture",
-  "Cleaning",
-];
+const NOT_RECORDED = "—";
+
+function sumCosts(values: Array<number | null>) {
+  const known = values.filter((v): v is number => v !== null);
+  return known.length ? known.reduce((a, b) => a + b, 0) : null;
+}
+
+function isSameMonth(date: Date, monthsAgo: number) {
+  const ref = new Date();
+  ref.setDate(1);
+  ref.setMonth(ref.getMonth() - monthsAgo);
+  return date.getFullYear() === ref.getFullYear() && date.getMonth() === ref.getMonth();
+}
 
 function formatCurrency(value: number) {
   return `₹${value.toLocaleString("en-IN")}`;
 }
 
-function categoryIcon(category: Category) {
+function categoryIcon(category: string) {
   if (category === "Electrical") return "⚡";
   if (category === "Plumbing") return "⌁";
   if (category === "Furniture") return "▣";
-  if (category === "Cleaning") return "✦";
+  if (category === "Cleaning" || category === "Cleanliness") return "✦";
   return "🔧";
 }
 
@@ -286,11 +216,11 @@ function WorkHistorySidebar() {
           className="flex items-center gap-3"
           aria-label="GBU Complaint Management System home"
         >
-          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-[#f8e9ef]">
+          <div className="flex h-10 w-10 items-center justify-center">
             <img
               src="/images/gbu-logo.png"
               alt="GBU"
-              className="h-8 w-8 object-contain"
+              className="h-full w-full object-contain"
             />
           </div>
 
@@ -346,7 +276,7 @@ function WorkHistorySidebar() {
   );
 }
 
-function TopBar() {
+function TopBar({ user, onSignOut }: { user: CurrentUser | null; onSignOut: () => void }) {
   return (
     <header className="flex min-h-[76px] items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-7">
       <div>
@@ -358,20 +288,7 @@ function TopBar() {
         </h1>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="hidden text-right sm:block">
-          <p className="text-sm font-semibold text-slate-800">
-            Rahul Kumar
-          </p>
-          <p className="text-xs text-slate-500">
-            Caretaker · Gautam Buddha Hostel
-          </p>
-        </div>
-
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f8e9ef] text-sm font-bold text-[#8e123f]">
-          RK
-        </div>
-      </div>
+      <UserMenu user={user} roleLabel="Caretaker" onSignOut={onSignOut} />
     </header>
   );
 }
@@ -407,9 +324,20 @@ function SummaryCard({
 }
 
 export default function CaretakerWorkHistoryPage() {
+  const { user, signOut } = useSession("caretaker");
+  const ready = Boolean(user);
+  const completed = useLoad(
+    () => (ready ? complaintsApi.list({ state: "completed", limit: 100 }) : Promise.resolve(null)),
+    [ready],
+  );
+  const workRecords = useMemo(() => (completed.data?.data ?? []).map(toRecord), [completed.data]);
+  const categories = useMemo(
+    () => ["All", ...Array.from(new Set(workRecords.map((r) => r.category))).sort()],
+    [workRecords],
+  );
+  const hostelName = user?.hostel?.name ?? null;
   const [search, setSearch] = useState("");
-  const [category, setCategory] =
-    useState<(typeof categories)[number]>("All");
+  const [category, setCategory] = useState("All");
   const [dateFilter, setDateFilter] = useState("All Time");
 
   const filteredRecords = useMemo(() => {
@@ -428,35 +356,24 @@ export default function CaretakerWorkHistoryPage() {
 
       const matchesDate =
         dateFilter === "All Time" ||
-        (dateFilter === "This Month" &&
-          record.completedOn.includes("Oct 2026")) ||
-        (dateFilter === "Last Month" &&
-          record.completedOn.includes("Sep 2026"));
+        (dateFilter === "This Month" && isSameMonth(record.completedAt, 0)) ||
+        (dateFilter === "Last Month" && isSameMonth(record.completedAt, 1));
 
       return matchesSearch && matchesCategory && matchesDate;
     });
-  }, [search, category, dateFilter]);
+  }, [workRecords, search, category, dateFilter]);
 
-  const totalMaterialCost = workRecords.reduce(
-    (sum, record) => sum + record.materialCost,
-    0,
-  );
-
-  const totalExpenditure = workRecords.reduce(
-    (sum, record) => sum + record.totalCost,
-    0,
-  );
-
-  const thisMonthCount = workRecords.filter((record) =>
-    record.completedOn.includes("Oct 2026"),
-  ).length;
+  const totalMaterialCost = sumCosts(workRecords.map((record) => record.materialCost));
+  const totalExpenditure = sumCosts(workRecords.map((record) => record.totalCost));
+  const thisMonthCount = workRecords.filter((record) => isSameMonth(record.completedAt, 0)).length;
+  const thisMonthName = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" }).format(new Date());
 
   return (
     <div className="flex min-h-screen bg-[#f7f7f8]">
       <WorkHistorySidebar />
 
       <div className="min-w-0 flex-1">
-        <TopBar />
+        <TopBar user={user} onSignOut={signOut} />
 
         <main className="px-4 py-5 sm:px-6 sm:py-7 lg:px-8">
           <div className="mx-auto max-w-[1440px]">
@@ -489,21 +406,21 @@ export default function CaretakerWorkHistoryPage() {
               <SummaryCard
                 title="This Month"
                 value={String(thisMonthCount)}
-                subtitle="Completed in October 2026"
+                subtitle={`Completed in ${thisMonthName}`}
                 icon={<CheckIcon />}
               />
 
               <SummaryCard
                 title="Material Cost"
-                value={formatCurrency(totalMaterialCost)}
-                subtitle="Materials used for completed work"
+                value={totalMaterialCost === null ? NOT_RECORDED : formatCurrency(totalMaterialCost)}
+                subtitle="Recorded once material logging is added"
                 icon={<RupeeIcon />}
               />
 
               <SummaryCard
                 title="Total Expenditure"
-                value={formatCurrency(totalExpenditure)}
-                subtitle="Recorded maintenance expenditure"
+                value={totalExpenditure === null ? NOT_RECORDED : formatCurrency(totalExpenditure)}
+                subtitle="Recorded once material logging is added"
                 icon={<RupeeIcon />}
               />
             </section>
@@ -590,11 +507,12 @@ export default function CaretakerWorkHistoryPage() {
                   </div>
 
                   <h3 className="mt-4 text-sm font-semibold text-slate-800">
-                    No work records found
+                    {completed.loading ? "Loading work history…" : completed.error ? "Could not load work history" : "No work records found"}
                   </h3>
 
-                  <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-slate-500">
-                    Try changing your search or filter options.
+                  <p role={completed.error ? "alert" : undefined} className="mx-auto mt-1 max-w-sm text-xs leading-5 text-slate-500">
+                    {completed.error ??
+                      (workRecords.length ? "Try changing your search or filter options." : "Completed work assigned to you will appear here.")}
                   </p>
                 </div>
               ) : (
@@ -635,10 +553,10 @@ export default function CaretakerWorkHistoryPage() {
                           >
                             <td className="px-5 py-4">
                               <p className="text-sm font-semibold text-slate-800">
-                                {record.id}
+                                {record.complaintId}
                               </p>
                               <p className="mt-1 text-[11px] text-slate-400">
-                                {record.complaintId}
+                                {record.requester}
                               </p>
                             </td>
 
@@ -647,7 +565,7 @@ export default function CaretakerWorkHistoryPage() {
                                 {record.description}
                               </p>
                               <p className="mt-1 text-[11px] text-slate-400">
-                                {record.material} · Qty {record.quantity}
+                                {record.material ? `${record.material} · Qty ${record.quantity}` : "Materials not recorded"}
                               </p>
                             </td>
 
@@ -670,10 +588,10 @@ export default function CaretakerWorkHistoryPage() {
 
                             <td className="px-5 py-4 text-right">
                               <p className="text-sm font-semibold text-slate-800">
-                                {formatCurrency(record.totalCost)}
+                                {record.totalCost === null ? NOT_RECORDED : formatCurrency(record.totalCost)}
                               </p>
                               <p className="mt-1 text-[11px] text-slate-400">
-                                Bill {record.billNumber}
+                                {record.billNumber ? `Bill ${record.billNumber}` : "No bill recorded"}
                               </p>
                             </td>
 
@@ -698,10 +616,10 @@ export default function CaretakerWorkHistoryPage() {
                         <div className="flex items-start justify-between gap-3">
                           <div>
                             <p className="text-sm font-bold text-slate-800">
-                              {record.id}
+                              {record.complaintId}
                             </p>
                             <p className="mt-1 text-[11px] text-slate-400">
-                              {record.complaintId}
+                              {record.requester}
                             </p>
                           </div>
 
@@ -725,7 +643,7 @@ export default function CaretakerWorkHistoryPage() {
                             </span>
 
                             <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-medium text-slate-600">
-                              Room {record.room}
+                              {record.room}
                             </span>
 
                             <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] font-medium text-slate-600">
@@ -740,10 +658,10 @@ export default function CaretakerWorkHistoryPage() {
                               Material
                             </p>
                             <p className="mt-1 text-xs font-semibold text-slate-700">
-                              {record.material}
+                              {record.material ?? "Not recorded"}
                             </p>
                             <p className="mt-0.5 text-[11px] text-slate-400">
-                              Qty {record.quantity}
+                              {record.quantity === null ? "" : `Qty ${record.quantity}`}
                             </p>
                           </div>
 
@@ -752,10 +670,10 @@ export default function CaretakerWorkHistoryPage() {
                               Total Cost
                             </p>
                             <p className="mt-1 text-sm font-bold text-slate-800">
-                              {formatCurrency(record.totalCost)}
+                              {record.totalCost === null ? NOT_RECORDED : formatCurrency(record.totalCost)}
                             </p>
                             <p className="mt-0.5 text-[11px] text-slate-400">
-                              {record.billNumber}
+                              {record.billNumber ?? "No bill recorded"}
                             </p>
                           </div>
                         </div>
@@ -765,7 +683,7 @@ export default function CaretakerWorkHistoryPage() {
                             Remarks
                           </p>
                           <p className="mt-1 text-xs leading-5 text-slate-500">
-                            {record.remarks}
+                            {record.remarks ?? "No remarks recorded."}
                           </p>
                         </div>
                       </article>
@@ -828,12 +746,12 @@ export default function CaretakerWorkHistoryPage() {
                 </p>
 
                 <h3 className="mt-2 text-base font-bold text-slate-900">
-                  Gautam Buddha Hostel
+                  {hostelName ?? "No hostel assigned"}
                 </h3>
 
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Work records and expenditure data will be connected to
-                  the backend for official hostel budgeting and billing.
+                  Completed work comes from your assigned requests. Material costs and bills
+                  will appear once material logging is added.
                 </p>
 
                 <div className="mt-4 border-t border-[#ead2dc] pt-4">
@@ -842,7 +760,7 @@ export default function CaretakerWorkHistoryPage() {
                   </p>
 
                   <p className="mt-1 text-xl font-bold text-[#8e123f]">
-                    {formatCurrency(totalExpenditure)}
+                    {totalExpenditure === null ? NOT_RECORDED : formatCurrency(totalExpenditure)}
                   </p>
                 </div>
               </div>

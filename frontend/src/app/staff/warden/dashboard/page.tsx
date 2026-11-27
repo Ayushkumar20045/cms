@@ -3,25 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 
-type ComplaintStatus =
-  | "SUBMITTED"
-  | "UNDER REVIEW"
-  | "ASSIGNED"
-  | "IN PROGRESS"
-  | "WAITING FOR INFORMATION"
-  | "RESOLVED"
-  | "ESCALATED";
-
-interface Complaint {
-  id: string;
-  student: string;
-  room: string;
-  category: string;
-  title: string;
-  status: ComplaintStatus;
-  updatedAt: string;
-  assignedTo: string;
-}
+import { RecurringIssues } from "@/components/complaints/recurring-issues";
+import { DecisionNote, RequestActions } from "@/components/complaints/request-actions";
+import { StaffStatusBadge } from "@/components/staff/status-badge";
+import { UserMenu } from "@/components/student/user-menu";
+import { staff as staffApi } from "@/lib/api/endpoints";
+import { useLoad, useSession } from "@/lib/session";
+import { staffRow } from "@/lib/staff";
 
 interface DashboardStat {
   label: string;
@@ -29,92 +17,6 @@ interface DashboardStat {
   description: string;
   icon: "complaints" | "pending" | "progress" | "resolved" | "overdue";
 }
-
-const complaints: Complaint[] = [
-  {
-    id: "CMP-2026-0148",
-    student: "Rahul Sharma",
-    room: "A-204",
-    category: "Electrical",
-    title: "Ceiling fan not working",
-    status: "IN PROGRESS",
-    updatedAt: "12 min ago",
-    assignedTo: "Electrical Staff",
-  },
-  {
-    id: "CMP-2026-0146",
-    student: "Arjun Singh",
-    room: "A-118",
-    category: "Plumbing",
-    title: "Water leakage in bathroom",
-    status: "ASSIGNED",
-    updatedAt: "38 min ago",
-    assignedTo: "Caretaker",
-  },
-  {
-    id: "CMP-2026-0142",
-    student: "Mohit Kumar",
-    room: "B-306",
-    category: "Cleaning",
-    title: "Washroom cleaning required",
-    status: "UNDER REVIEW",
-    updatedAt: "1 hr ago",
-    assignedTo: "Warden",
-  },
-  {
-    id: "CMP-2026-0139",
-    student: "Aditya Verma",
-    room: "B-211",
-    category: "Furniture",
-    title: "Broken study table",
-    status: "WAITING FOR INFORMATION",
-    updatedAt: "2 hrs ago",
-    assignedTo: "Caretaker",
-  },
-  {
-    id: "CMP-2026-0134",
-    student: "Kunal Yadav",
-    room: "A-102",
-    category: "Electrical",
-    title: "Tube light replacement",
-    status: "RESOLVED",
-    updatedAt: "Yesterday",
-    assignedTo: "Electrical Staff",
-  },
-];
-
-const stats: DashboardStat[] = [
-  {
-    label: "Total Complaints",
-    value: 48,
-    description: "This month",
-    icon: "complaints",
-  },
-  {
-    label: "Pending",
-    value: 9,
-    description: "Need attention",
-    icon: "pending",
-  },
-  {
-    label: "In Progress",
-    value: 14,
-    description: "Currently being handled",
-    icon: "progress",
-  },
-  {
-    label: "Resolved",
-    value: 25,
-    description: "This month",
-    icon: "resolved",
-  },
-  {
-    label: "Overdue",
-    value: 3,
-    description: "Require follow-up",
-    icon: "overdue",
-  },
-];
 
 function StatIcon({ type }: { type: DashboardStat["icon"] }) {
   const common = {
@@ -191,27 +93,6 @@ function StatIcon({ type }: { type: DashboardStat["icon"] }) {
       />
       <path d="M12 8v4M12 15.5h.01" strokeLinecap="round" />
     </svg>
-  );
-}
-
-function StatusBadge({ status }: { status: ComplaintStatus }) {
-  const styles: Record<ComplaintStatus, string> = {
-    SUBMITTED: "bg-blue-50 text-blue-700 border-blue-200",
-    "UNDER REVIEW": "bg-amber-50 text-amber-700 border-amber-200",
-    ASSIGNED: "bg-violet-50 text-violet-700 border-violet-200",
-    "IN PROGRESS": "bg-sky-50 text-sky-700 border-sky-200",
-    "WAITING FOR INFORMATION":
-      "bg-orange-50 text-orange-700 border-orange-200",
-    RESOLVED: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    ESCALATED: "bg-rose-50 text-rose-700 border-rose-200",
-  };
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${styles[status]}`}
-    >
-      {status}
-    </span>
   );
 }
 
@@ -448,14 +329,14 @@ function SidebarHeader({ mobile = false }: { mobile?: boolean }) {
       }`}
     >
       <div
-        className={`flex items-center justify-center overflow-hidden bg-[#f8e9ef] ${
-          mobile ? "h-9 w-9 rounded-lg" : "h-10 w-10 rounded-xl"
+        className={`flex items-center justify-center overflow-hidden ${
+          mobile ? "h-9 w-9" : "h-10 w-10"
         }`}
       >
         <img
           src="/images/gbu-logo.png"
           alt="GBU"
-          className={mobile ? "h-7 w-7 object-contain" : "h-8 w-8 object-contain"}
+          className={mobile ? "h-full w-full object-contain" : "h-full w-full object-contain"}
         />
       </div>
 
@@ -467,7 +348,7 @@ function SidebarHeader({ mobile = false }: { mobile?: boolean }) {
   );
 }
 
-function SignedInCard() {
+function SignedInCard({ hostel }: { hostel: string | null }) {
   return (
     <div className="rounded-xl bg-[#fdf3f7] px-3.5 py-3">
       <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#a5174d]">
@@ -475,7 +356,7 @@ function SignedInCard() {
       </p>
       <p className="mt-1 text-sm font-bold text-slate-900">Warden</p>
       <p className="mt-0.5 text-xs text-slate-500">
-        Gautam Buddha Boys Hostel
+        {hostel ?? "No hostel assigned"}
       </p>
     </div>
   );
@@ -483,7 +364,25 @@ function SignedInCard() {
 
 export default function WardenDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const visibleComplaints = complaints.slice(0, 5);
+  const { user, signOut } = useSession("warden");
+  const ready = Boolean(user);
+  const dashboard = useLoad(() => (ready ? staffApi.dashboard() : Promise.resolve(null)), [ready]);
+  const counts = dashboard.data?.counts;
+  const overview = dashboard.data?.hostel ?? null;
+  const hostelName = overview?.hostel.name ?? user?.hostel?.name ?? null;
+  const visibleComplaints = (dashboard.data?.recent ?? []).map(staffRow);
+  const stats: DashboardStat[] = [
+    { label: "Total Complaints", value: counts?.total ?? 0, description: "All complaints for your hostel", icon: "complaints" },
+    { label: "Pending", value: counts?.pending ?? 0, description: "Need review or assignment", icon: "pending" },
+    {
+      label: "In Progress",
+      value: counts ? counts.assigned + counts.inProgress + counts.waitingForMaterials + counts.waitingForInformation : 0,
+      description: "Currently being handled",
+      icon: "progress",
+    },
+    { label: "Resolved", value: counts?.resolved ?? 0, description: "Resolved or closed", icon: "resolved" },
+    { label: "Overdue", value: counts?.overdue ?? 0, description: "Past expected resolution", icon: "overdue" },
+  ];
 
   return (
     <div className="min-h-screen bg-[#f7f7f8] text-slate-900">
@@ -492,7 +391,7 @@ export default function WardenDashboard() {
           <SidebarHeader />
 
           <div className="border-b border-slate-100 px-4 py-4">
-            <SignedInCard />
+            <SignedInCard hostel={hostelName} />
           </div>
 
           <Navigation />
@@ -522,7 +421,7 @@ export default function WardenDashboard() {
               </div>
 
               <div className="px-3 pt-5">
-                <SignedInCard />
+                <SignedInCard hostel={hostelName} />
               </div>
 
               <Navigation
@@ -555,18 +454,7 @@ export default function WardenDashboard() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="hidden text-right sm:block">
-                <p className="text-xs font-bold text-slate-800">
-                  Rajesh Kumar
-                </p>
-                <p className="text-[10px] text-slate-500">Warden</p>
-              </div>
-
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f8e9ef] text-xs font-bold text-[#a5174d]">
-                RK
-              </div>
-            </div>
+            <UserMenu user={user} roleLabel="Warden" onSignOut={signOut} />
           </header>
 
           <div className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8 lg:py-8">
@@ -623,6 +511,8 @@ export default function WardenDashboard() {
               ))}
             </section>
 
+            <RecurringIssues ready={ready} />
+
             <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_250px]">
               <div className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
@@ -644,7 +534,7 @@ export default function WardenDashboard() {
                 </div>
 
                 <div className="hidden overflow-x-auto md:block">
-                  <table className="w-full min-w-[720px]">
+                  <table className="w-full min-w-[900px]">
                     <thead>
                       <tr className="border-b border-slate-100 text-left">
                         <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
@@ -662,6 +552,9 @@ export default function WardenDashboard() {
                         <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                           Updated
                         </th>
+                        <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
 
@@ -673,7 +566,7 @@ export default function WardenDashboard() {
                               {complaint.title}
                             </p>
                             <p className="mt-1 text-xs text-slate-400">
-                              {complaint.id}
+                              {complaint.complaintNumber}
                             </p>
                           </td>
 
@@ -682,7 +575,7 @@ export default function WardenDashboard() {
                               {complaint.student}
                             </p>
                             <p className="mt-1 text-xs text-slate-400">
-                              Room {complaint.room}
+                              {complaint.place}
                             </p>
                           </td>
 
@@ -691,17 +584,28 @@ export default function WardenDashboard() {
                           </td>
 
                           <td className="px-5 py-4">
-                            <StatusBadge status={complaint.status} />
+                            <StaffStatusBadge status={complaint.status} />
+                            <DecisionNote complaint={complaint.raw} />
                           </td>
 
                           <td className="px-5 py-4 text-xs text-slate-500">
                             {complaint.updatedAt}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <RequestActions complaint={complaint.raw} user={user} onChanged={dashboard.reload} />
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
+
+                {(dashboard.loading || dashboard.error || visibleComplaints.length === 0) && (
+                  <p role={dashboard.error ? "alert" : undefined} className={`px-5 py-8 text-center text-sm ${dashboard.error ? "text-red-600" : "text-slate-500"}`}>
+                    {dashboard.error ?? (dashboard.loading ? "Loading complaints…" : "No complaints for your hostel yet.")}
+                  </p>
+                )}
 
                 <div className="divide-y divide-slate-100 md:hidden">
                   {visibleComplaints.map((complaint) => (
@@ -712,11 +616,17 @@ export default function WardenDashboard() {
                             {complaint.title}
                           </p>
                           <p className="mt-1 text-xs text-slate-400">
-                            {complaint.id}
+                            {complaint.complaintNumber}
                           </p>
                         </div>
 
-                        <StatusBadge status={complaint.status} />
+                        <StaffStatusBadge status={complaint.status} />
+                      </div>
+
+                      <DecisionNote complaint={complaint.raw} />
+
+                      <div className="mt-3">
+                        <RequestActions complaint={complaint.raw} user={user} onChanged={dashboard.reload} />
                       </div>
 
                       <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
@@ -728,9 +638,9 @@ export default function WardenDashboard() {
                         </div>
 
                         <div>
-                          <p className="text-slate-400">Room</p>
+                          <p className="text-slate-400">Location</p>
                           <p className="mt-1 font-medium text-slate-700">
-                            {complaint.room}
+                            {complaint.place}
                           </p>
                         </div>
 
@@ -836,7 +746,7 @@ export default function WardenDashboard() {
                     <div>
                       <p className="text-xs text-slate-400">Hostel</p>
                       <p className="mt-1 text-sm font-semibold text-slate-800">
-                        Gautam Buddha Boys Hostel
+                        {hostelName ?? "No hostel assigned"}
                       </p>
                     </div>
 
@@ -844,14 +754,14 @@ export default function WardenDashboard() {
                       <div>
                         <p className="text-xs text-slate-400">Students</p>
                         <p className="mt-1 text-lg font-bold text-slate-900">
-                          312
+                          {overview?.students ?? "–"}
                         </p>
                       </div>
 
                       <div>
                         <p className="text-xs text-slate-400">Active Issues</p>
                         <p className="mt-1 text-lg font-bold text-slate-900">
-                          23
+                          {overview?.activeIssues ?? "–"}
                         </p>
                       </div>
                     </div>

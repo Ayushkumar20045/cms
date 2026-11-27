@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-/*
- * Sends visitors without a session back to the login page before a portal page renders.
- * This is navigation only: the session cookie is HttpOnly and is verified by the backend on
- * every API call, so this check is not a security boundary.
- */
 export function proxy(request: NextRequest) {
+  // Temporary local preview mode. Production authentication remains enforced.
+  if (process.env.NODE_ENV === "development") {
+    return NextResponse.next();
+  }
+
   const hasSession =
     request.cookies.has("gbu_access") || request.cookies.has("gbu_csrf");
 

@@ -46,6 +46,7 @@ export const studentStatusLabel: Record<ComplaintStatus, string> = {
   ASSIGNED: "Assigned",
   IN_PROGRESS: "In Progress",
   WAITING_FOR_INFORMATION: "Waiting",
+  WAITING_FOR_MATERIALS: "Waiting for Materials",
   RESOLVED: "Resolved",
   CLOSED: "Closed",
   REJECTED: "Rejected",

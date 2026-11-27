@@ -21,7 +21,7 @@ const roles: Array<{
   },
   {
     value: "staff",
-    label: "Hostel Staff",
+    label: "Staff",
     icon: "users",
   },
   {

@@ -168,7 +168,7 @@ export default function StudentDashboard() {
               className="flex items-center gap-3"
               aria-label="Student dashboard"
             >
-              <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="flex h-9 w-9 items-center justify-center">
                 <img
                   src="/images/gbu-logo.png"
                   alt="Gautam Buddha University"
@@ -211,6 +211,17 @@ export default function StudentDashboard() {
                 <NavigationIcon type="complaints" />
                 <span>My Complaints</span>
               </Link>
+
+              <Link
+                href="/student/map"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-[18px] w-[18px]">
+                  <path d="m9 4-5 2v14l5-2 6 2 5-2V4l-5 2-6-2Z" strokeLinejoin="round" />
+                  <path d="M9 4v14M15 6v14" />
+                </svg>
+                <span>Campus Map</span>
+              </Link>
             </div>
           </nav>
         </aside>
@@ -237,7 +248,7 @@ export default function StudentDashboard() {
                 </p>
 
                 <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
-                  Here's your complaint overview.
+                  Here is your complaint overview.
                 </h2>
 
                 <p className="mt-1.5 max-w-xl text-sm text-slate-500">

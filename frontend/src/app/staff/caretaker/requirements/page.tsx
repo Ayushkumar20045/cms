@@ -172,11 +172,11 @@ function HostelIcon() {
 function SidebarHeader() {
   return (
     <div className="flex h-20 items-center gap-3 border-b border-slate-100 px-6">
-      <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-[#f8e9ef]">
+      <div className="flex h-10 w-10 items-center justify-center">
         <img
           src="/images/gbu-logo.png"
           alt="GBU"
-          className="h-8 w-8 object-contain"
+          className="h-full w-full object-contain"
         />
       </div>
 

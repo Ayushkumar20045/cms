@@ -7,19 +7,48 @@ import { ApiError } from "./api/client";
 import { auth } from "./api/endpoints";
 import type { CurrentUser } from "./api/types";
 
-type Area = "student" | "admin";
+type Area = "student" | "admin" | "warden" | "caretaker" | "board" | "any" | StaffPortalRole;
 
-const homeFor = (user: CurrentUser): string => {
-  if (user.roles.some((role) => role === "ADMIN" || role === "SUPER_ADMIN")) return "/admin/dashboard";
-  if (user.roles.includes("WARDEN")) return "/staff/warden/dashboard";
-  if (user.roles.includes("CARETAKER")) return "/staff/caretaker/dashboard";
-  if (user.roles.includes("STUDENT")) return "/student/dashboard";
+/** Campus staff roles served by the shared staff portal at /staff/<slug>/dashboard */
+export type StaffPortalRole = "technician" | "supervisor" | "department-head" | "store" | "authority";
+
+export const STAFF_PORTALS: Record<StaffPortalRole, { role: string; label: string }> = {
+  "department-head": { role: "DEPARTMENT_HEAD", label: "Department Head" },
+  supervisor: { role: "SUPERVISOR", label: "Supervisor" },
+  store: { role: "STORE_MANAGER", label: "Store Manager" },
+  technician: { role: "TECHNICIAN", label: "Technician" },
+  authority: { role: "AUTHORITY", label: "Authority" },
+};
+
+// Faculty and non-teaching staff raise and track requests through the student pages
+const REQUESTER_ROLES = ["STUDENT", "FACULTY", "STAFF"];
+const isRequester = (user: CurrentUser) => user.roles.some((role) => REQUESTER_ROLES.includes(role));
+
+// Same precedence as the backend's login redirect
+export const homeFor = (user: CurrentUser): string => {
+  const has = (role: string) => user.roles.includes(role);
+  if (has("ADMIN") || has("SUPER_ADMIN")) return "/admin/dashboard";
+  if (has("DEPARTMENT_HEAD")) return "/staff/department-head/dashboard";
+  if (has("SUPERVISOR")) return "/staff/supervisor/dashboard";
+  if (has("WARDEN")) return "/staff/warden/dashboard";
+  if (has("STORE_MANAGER")) return "/staff/store/dashboard";
+  if (has("TECHNICIAN")) return "/staff/technician/dashboard";
+  if (has("CARETAKER")) return "/staff/caretaker/dashboard";
+  if (has("AUTHORITY")) return "/staff/authority/dashboard";
+  if (isRequester(user)) return "/student/dashboard";
   return "/";
 };
 
 const allowed: Record<Area, (user: CurrentUser) => boolean> = {
-  student: (user) => user.roles.includes("STUDENT"),
+  student: isRequester,
   admin: (user) => user.roles.some((role) => role === "ADMIN" || role === "SUPER_ADMIN"),
+  board: (user) => user.roles.some((role) => !REQUESTER_ROLES.includes(role)),
+  any: () => true,
+  warden: (user) => user.roles.includes("WARDEN"),
+  caretaker: (user) => user.roles.includes("CARETAKER"),
+  ...(Object.fromEntries(
+    Object.entries(STAFF_PORTALS).map(([slug, portal]) => [slug, (user: CurrentUser) => user.roles.includes(portal.role)]),
+  ) as Record<StaffPortalRole, (user: CurrentUser) => boolean>),
 };
 
 /**
@@ -33,6 +62,47 @@ export function useSession(area: Area) {
 
   useEffect(() => {
     let active = true;
+
+    // Temporary local preview mode. Never enabled in production.
+    if (process.env.NODE_ENV === "development") {
+      const previewRoles: Record<Area, string> = {
+        student: "STUDENT",
+        admin: "ADMIN",
+        warden: "WARDEN",
+        caretaker: "CARETAKER",
+        "department-head": "DEPARTMENT_HEAD",
+        supervisor: "SUPERVISOR",
+        store: "STORE_MANAGER",
+        technician: "TECHNICIAN",
+        authority: "AUTHORITY",
+        board: "ADMIN",
+        any: "STUDENT",
+      };
+
+      const role = previewRoles[area];
+      const previewUser: CurrentUser = {
+        id: `preview-${area}`,
+        loginId: `preview-${area}`,
+        email: null,
+        firstName: "Preview",
+        lastName: "User",
+        fullName: `Preview ${area.replace("-", " ")}`,
+        phone: null,
+        status: "ACTIVE",
+        roles: [role],
+        permissions: [],
+        hostel: null,
+        roomNumber: null,
+        block: null,
+        department: null,
+      };
+
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- temporary development preview session
+      setUser(previewUser);
+      return () => {
+        active = false;
+      };
+    }
 
     auth
       .me()
@@ -54,6 +124,11 @@ export function useSession(area: Area) {
   }, [area, router]);
 
   const signOut = useCallback(async () => {
+    if (process.env.NODE_ENV === "development") {
+      router.replace("/");
+      return;
+    }
+
     try {
       await auth.logout();
     } finally {
@@ -98,5 +173,14 @@ export function useLoad<T>(loader: () => Promise<T>, deps: DependencyList) {
 
   const reload = useCallback(() => setVersion((v) => v + 1), []);
 
+  // A new notification (new complaint, decision, status change) means the data on screen may be stale
+  useEffect(() => {
+    window.addEventListener(NOTIFICATION_EVENT, reload);
+    return () => window.removeEventListener(NOTIFICATION_EVENT, reload);
+  }, [reload]);
+
   return { data, error, loading, reload };
 }
+
+/** Fired by the notification bell when new notifications arrive; open pages reload their data. */
+export const NOTIFICATION_EVENT = "gbu:notifications";

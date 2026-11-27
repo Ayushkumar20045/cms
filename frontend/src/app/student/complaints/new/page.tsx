@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChangeEvent, FormEvent, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 
 import { ApiError } from "@/lib/api/client";
-import { complaints as complaintsApi } from "@/lib/api/endpoints";
+import { complaints as complaintsApi, locations as locationsApi } from "@/lib/api/endpoints";
 import { initials } from "@/lib/format";
 import { useLoad, useSession } from "@/lib/session";
 
@@ -180,6 +180,15 @@ export default function RaiseComplaintPage() {
     [ready],
   );
   const categories = (categoryList.data ?? []).map((item) => item.name);
+  const buildingList = useLoad(
+    () => (ready ? locationsApi.buildings() : Promise.resolve(null)),
+    [ready],
+  );
+  // Hostel residents may leave the building empty: the server then uses their own hostel and room
+  const ownHostel = user?.hostel ?? null;
+  const buildings = (buildingList.data ?? []).filter(
+    (item) => !ownHostel || item.hostel?.id !== ownHostel.id,
+  );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [submitted, setSubmitted] = useState<string | null>(null);
@@ -187,11 +196,33 @@ export default function RaiseComplaintPage() {
   const [category, setCategory] = useState<ComplaintCategory>("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [buildingId, setBuildingId] = useState("");
+  const [roomId, setRoomId] = useState("");
+  const [locationDetails, setLocationDetails] = useState("");
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
+  const buildingDetail = useLoad(
+    () =>
+      ready && buildingId
+        ? locationsApi.building(Number(buildingId))
+        : Promise.resolve(null),
+    [ready, buildingId],
+  );
+  // "Report a problem here" on the campus map links to this form with ?buildingId=
+  useEffect(() => {
+    const preset = new URLSearchParams(window.location.search).get("buildingId");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (preset && /^\d+$/.test(preset)) setBuildingId(preset);
+  }, []);
+  // Ignore a detail still loaded for a previously selected building
+  const floors =
+    buildingDetail.data && buildingDetail.data.id === Number(buildingId)
+      ? buildingDetail.data.floors.filter((floor) => floor.rooms.length)
+      : [];
 
   const [categoryError, setCategoryError] = useState("");
   const [titleError, setTitleError] = useState("");
   const [descriptionError, setDescriptionError] = useState("");
+  const [locationError, setLocationError] = useState("");
   const [formMessage, setFormMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -200,6 +231,13 @@ export default function RaiseComplaintPage() {
   function handleCategoryChange(event: ChangeEvent<HTMLSelectElement>) {
     setCategory(event.target.value as ComplaintCategory);
     setCategoryError("");
+    setFormMessage("");
+  }
+
+  function handleBuildingChange(event: ChangeEvent<HTMLSelectElement>) {
+    setBuildingId(event.target.value);
+    setRoomId("");
+    setLocationError("");
     setFormMessage("");
   }
 
@@ -290,6 +328,13 @@ export default function RaiseComplaintPage() {
       setCategoryError("");
     }
 
+    if (!buildingId && !ownHostel) {
+      setLocationError("Please choose the building where the problem is.");
+      isValid = false;
+    } else {
+      setLocationError("");
+    }
+
     if (!title.trim()) {
       setTitleError("Please enter a complaint title.");
       isValid = false;
@@ -322,11 +367,14 @@ export default function RaiseComplaintPage() {
 
     setIsSubmitting(true);
 
-    // Hostel and student details are taken from the signed-in account by the server
+    // Requester details come from the signed-in account; without a building the server uses the requester's hostel
     const form = new FormData();
     form.set("category", category);
     form.set("title", title.trim());
     form.set("description", description.trim());
+    if (buildingId) form.set("buildingId", buildingId);
+    if (roomId) form.set("roomId", roomId);
+    if (locationDetails.trim()) form.set("locationDetails", locationDetails.trim());
     for (const { file } of selectedFiles) {
       form.append("files", file);
     }
@@ -343,6 +391,12 @@ export default function RaiseComplaintPage() {
         setCategoryError(error.fieldError("category") ?? "");
         setTitleError(error.fieldError("title") ?? "");
         setDescriptionError(error.fieldError("description") ?? "");
+        setLocationError(
+          error.fieldError("buildingId") ??
+            error.fieldError("roomId") ??
+            error.fieldError("locationDetails") ??
+            "",
+        );
         setFormMessage(error.errors.length ? "Please correct the highlighted fields." : error.message);
       } else {
         setFormMessage("Unable to submit your complaint right now. Please try again.");
@@ -360,7 +414,7 @@ export default function RaiseComplaintPage() {
               className="flex items-center gap-3"
               aria-label="Go to student dashboard"
             >
-              <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg bg-white">
+              <div className="flex h-10 w-10 items-center justify-center">
                 <img
                   src="/images/gbu-logo.png"
                   alt="Gautam Buddha University"
@@ -420,7 +474,7 @@ export default function RaiseComplaintPage() {
             <div className="flex items-center gap-3 lg:hidden">
               <Link
                 href="/student/dashboard"
-                className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white"
+                className="flex h-9 w-9 items-center justify-center"
                 aria-label="Go to student dashboard"
               >
                 <img
@@ -596,6 +650,122 @@ export default function RaiseComplaintPage() {
                       complaint.
                     </p>
                   </div>
+
+                  <fieldset>
+                    <legend className="mb-2 block text-sm font-semibold text-slate-700">
+                      Location{" "}
+                      {ownHostel ? (
+                        <span className="font-normal text-slate-400">
+                          (Optional)
+                        </span>
+                      ) : (
+                        <span className="text-[#a5174d]">*</span>
+                      )}
+                    </legend>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="complaint-building" className="sr-only">
+                          Building
+                        </label>
+                        <div className="relative">
+                          <select
+                            id="complaint-building"
+                            value={buildingId}
+                            onChange={handleBuildingChange}
+                            aria-invalid={Boolean(locationError)}
+                            aria-describedby={
+                              locationError ? "complaint-location-error" : undefined
+                            }
+                            className={`h-11 w-full appearance-none rounded-lg border bg-white px-3.5 pr-10 text-sm text-slate-800 outline-none transition-all ${
+                          locationError
+                            ? "border-red-300 focus:border-red-400 focus:ring-4 focus:ring-red-100"
+                            : "border-slate-200 focus:border-[#a5174d] focus:ring-4 focus:ring-[#a5174d]/10"
+                        }`}
+                          >
+                            <option value="">
+                              {ownHostel
+                                ? `My hostel (${ownHostel.name})`
+                                : "Select building"}
+                            </option>
+                            {buildings.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDownIcon />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label htmlFor="complaint-room" className="sr-only">
+                          Room
+                        </label>
+                        <div className="relative">
+                          <select
+                            id="complaint-room"
+                            value={roomId}
+                            onChange={(event) => {
+                              setRoomId(event.target.value);
+                              setLocationError("");
+                            }}
+                            disabled={!floors.length}
+                            className="h-11 w-full appearance-none rounded-lg border border-slate-200 bg-white px-3.5 pr-10 text-sm text-slate-800 outline-none transition-all focus:border-[#a5174d] focus:ring-4 focus:ring-[#a5174d]/10 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+                          >
+                            <option value="">
+                              {floors.length ? "Room (optional)" : "No rooms listed"}
+                            </option>
+                            {floors.map((floor) => (
+                              <optgroup key={floor.id} label={floor.name}>
+                                {floor.rooms.map((room) => (
+                                  <option key={room.id} value={room.id}>
+                                    {room.name
+                                      ? `${room.number} - ${room.name}`
+                                      : room.number}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </select>
+                          <ChevronDownIcon />
+                        </div>
+                      </div>
+                    </div>
+
+                    <label htmlFor="complaint-location-details" className="sr-only">
+                      Location details
+                    </label>
+                    <input
+                      id="complaint-location-details"
+                      type="text"
+                      value={locationDetails}
+                      maxLength={255}
+                      onChange={(event) => {
+                        setLocationDetails(event.target.value);
+                        setLocationError("");
+                      }}
+                      placeholder={
+                        ownHostel && !buildingId
+                          ? "Your hostel room is used unless you describe another spot"
+                          : "Exact spot, e.g. near the main stairs"
+                      }
+                      className="mt-3 h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all focus:border-[#a5174d] focus:ring-4 focus:ring-[#a5174d]/10"
+                    />
+
+                    {locationError && (
+                      <p
+                        id="complaint-location-error"
+                        className="mt-1.5 text-xs font-medium text-red-600"
+                      >
+                        {locationError}
+                      </p>
+                    )}
+
+                    <p className="mt-1.5 text-xs text-slate-400">
+                      Tell us where the problem is so the right team can find it.
+                    </p>
+                  </fieldset>
 
                   <div>
                     <label

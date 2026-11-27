@@ -4,13 +4,11 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { ApiError } from "@/lib/api/client";
-import { auth } from "@/lib/api/endpoints";
+import { auth, type StaffRole } from "@/lib/api/endpoints";
 
 import { IdentifierField } from "./identifier-field";
 import { PasswordField } from "./password-field";
 import type { UserRole } from "./role-selector";
-
-type StaffRole = "warden" | "caretaker";
 
 interface LoginFormProps {
   role: UserRole;
@@ -31,7 +29,7 @@ const roleLoginConfig: Record<UserRole, RoleLoginConfig> = {
   staff: {
     identifierLabel: "Staff ID",
     identifierPlaceholder: "Enter your staff ID",
-    submitLabel: "Sign In as Hostel Staff",
+    submitLabel: "Sign In as Staff",
   },
   admin: {
     identifierLabel: "Admin ID",
@@ -54,6 +52,31 @@ const staffRoles: Array<{
     value: "caretaker",
     label: "Caretaker",
     description: "Handle hostel maintenance and assigned tasks",
+  },
+  {
+    value: "technician",
+    label: "Technician",
+    description: "Carry out assigned repair and maintenance jobs",
+  },
+  {
+    value: "supervisor",
+    label: "Supervisor",
+    description: "Review and assign your department's requests",
+  },
+  {
+    value: "department_head",
+    label: "Department Head",
+    description: "Oversee department work and approve escalations",
+  },
+  {
+    value: "store_manager",
+    label: "Store Manager",
+    description: "Approve and issue materials and equipment",
+  },
+  {
+    value: "authority",
+    label: "Authority",
+    description: "Handle specialised requests assigned to you",
   },
 ];
 
@@ -266,7 +289,7 @@ export function LoginForm({ role }: LoginFormProps) {
           <>
             {role === "staff"
               ? `Sign In as ${
-                  staffRole === "warden" ? "Warden" : "Caretaker"
+                  staffRoles.find((item) => item.value === staffRole)?.label ?? "Staff"
                 }`
               : config.submitLabel}
 

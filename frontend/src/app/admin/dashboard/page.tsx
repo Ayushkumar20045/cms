@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { admin } from "@/lib/api/endpoints";
-import type { ComplaintStatus, ComplaintSummary } from "@/lib/api/types";
+import { admin, requirements as requirementsApi } from "@/lib/api/endpoints";
+import type { ComplaintStatus, ComplaintSummary, RequirementStatus } from "@/lib/api/types";
 import { adminStatusLabel, formatDate, initials } from "@/lib/format";
 import { useLoad, useSession } from "@/lib/session";
 
@@ -34,25 +34,7 @@ function toRow(complaint: ComplaintSummary): Complaint {
   };
 }
 
-type RequirementStatus =
-  | "REQUESTED"
-  | "UNDER REVIEW"
-  | "APPROVED"
-  | "FULFILLED";
 
-type Requirement = {
-  id: string;
-  item: string;
-  hostel: string;
-  requestedBy: string;
-  quantity: number;
-  status: RequirementStatus;
-  date: string;
-};
-
-// Requirement tickets are created by wardens and caretakers; that module is not connected yet,
-// so this list stays empty and the section shows an empty state.
-const requirements: Requirement[] = [];
 
 const statusStyles: Record<DisplayStatus, string> = {
   SUBMITTED: "bg-blue-50 text-blue-700",
@@ -60,6 +42,7 @@ const statusStyles: Record<DisplayStatus, string> = {
   ASSIGNED: "bg-violet-50 text-violet-700",
   IN_PROGRESS: "bg-violet-50 text-violet-700",
   WAITING_FOR_INFORMATION: "bg-slate-100 text-slate-600",
+  WAITING_FOR_MATERIALS: "bg-amber-50 text-amber-700",
   ESCALATED: "bg-rose-50 text-rose-700",
   REOPENED: "bg-amber-50 text-amber-700",
   RESOLVED: "bg-emerald-50 text-emerald-700",
@@ -73,9 +56,9 @@ const statusText = (status: DisplayStatus) =>
   status === "OVERDUE" ? "OVERDUE" : adminStatusLabel(status);
 
 const requirementStyles: Record<RequirementStatus, string> = {
-  REQUESTED: "bg-blue-50 text-blue-700",
-  "UNDER REVIEW": "bg-amber-50 text-amber-700",
+  PENDING: "bg-amber-50 text-amber-700",
   APPROVED: "bg-violet-50 text-violet-700",
+  REJECTED: "bg-rose-50 text-rose-700",
   FULFILLED: "bg-emerald-50 text-emerald-700",
 };
 
@@ -262,6 +245,15 @@ function ChartIcon() {
   );
 }
 
+function MapIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" className="h-4 w-4" stroke="currentColor" strokeWidth="1.8">
+      <path d="m9 4-5 2v14l5-2 6 2 5-2V4l-5 2-6-2Z" strokeLinejoin="round" />
+      <path d="M9 4v14M15 6v14" />
+    </svg>
+  );
+}
+
 function AdminSidebar() {
   const navigation = [
     {
@@ -300,6 +292,11 @@ function AdminSidebar() {
       href: "/admin/reports",
       icon: <ReportsIcon />,
     },
+    {
+  label: "Campus Map",
+  href: "/admin/map",
+  icon: <MapIcon />,
+},
   ];
 
   return (
@@ -474,6 +471,12 @@ export default function AdminDashboardPage() {
     () => (ready ? admin.dashboard() : Promise.resolve(null)),
     [ready],
   );
+
+  const requirementList = useLoad(
+    () => (ready ? requirementsApi.list({ page: 1, limit: 5 }) : Promise.resolve(null)),
+    [ready],
+  );
+  const recentRequirements = requirementList.data?.data ?? [];
   // Searching goes to the server so it covers every complaint, not only the five on screen
   const searched = useLoad(
     () =>
@@ -999,14 +1002,21 @@ export default function AdminDashboardPage() {
                 </Link>
               </div>
 
-              {requirements.length === 0 && (
-                <p className="px-5 py-10 text-center text-xs text-slate-400">
-                  Requirement requests from wardens and caretakers will appear here once
-                  the hostel staff module is connected.
+              {requirementList.error ? (
+                <p className="px-5 py-8 text-center text-xs text-rose-600">
+                  Could not load requirement requests: {requirementList.error}
                 </p>
-              )}
+              ) : requirementList.loading && !requirementList.data ? (
+                <p className="px-5 py-8 text-center text-xs text-slate-400">
+                  Loading requirement requests…
+                </p>
+              ) : recentRequirements.length === 0 ? (
+                <p className="px-5 py-8 text-center text-xs text-slate-400">
+                  No requirement requests have been submitted yet.
+                </p>
+              ) : null}
 
-              <div className={requirements.length ? "hidden overflow-x-auto md:block" : "hidden"}>
+              <div className={recentRequirements.length ? "hidden overflow-x-auto md:block" : "hidden"}>
                 <table className="w-full min-w-[750px] border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/70 text-left">
@@ -1029,7 +1039,7 @@ export default function AdminDashboardPage() {
                   </thead>
 
                   <tbody>
-                    {requirements.map((requirement) => (
+                    {recentRequirements.map((requirement) => (
                       <tr
                         key={requirement.id}
                         className="border-b border-slate-100 last:border-0"
@@ -1039,16 +1049,16 @@ export default function AdminDashboardPage() {
                             {requirement.item}
                           </p>
                           <p className="mt-1 text-[11px] text-slate-400">
-                            {requirement.id} · {requirement.date}
+                            {requirement.requirementNumber} · {formatDate(requirement.createdAt)}
                           </p>
                         </td>
 
                         <td className="px-5 py-4 text-sm text-slate-600">
-                          {requirement.hostel}
+                          {requirement.hostel?.name ?? '—'}
                         </td>
 
                         <td className="px-5 py-4 text-sm text-slate-600">
-                          {requirement.requestedBy}
+                          {requirement.requestedBy.fullName}
                         </td>
 
                         <td className="px-5 py-4 text-sm font-medium text-slate-700">
@@ -1069,7 +1079,7 @@ export default function AdminDashboardPage() {
               </div>
 
               <div className="divide-y divide-slate-100 md:hidden">
-                {requirements.map((requirement) => (
+                {recentRequirements.map((requirement) => (
                   <article key={requirement.id} className="p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -1077,7 +1087,7 @@ export default function AdminDashboardPage() {
                           {requirement.item}
                         </p>
                         <p className="mt-1 text-[11px] text-slate-400">
-                          {requirement.id}
+                          {requirement.requirementNumber}
                         </p>
                       </div>
 
@@ -1094,7 +1104,7 @@ export default function AdminDashboardPage() {
                           Hostel
                         </p>
                         <p className="mt-1 text-xs text-slate-700">
-                          {requirement.hostel}
+                          {requirement.hostel?.name ?? '—'}
                         </p>
                       </div>
 
@@ -1112,7 +1122,7 @@ export default function AdminDashboardPage() {
                           Requested By
                         </p>
                         <p className="mt-1 text-xs text-slate-700">
-                          {requirement.requestedBy}
+                          {requirement.requestedBy.fullName}
                         </p>
                       </div>
 
@@ -1121,7 +1131,7 @@ export default function AdminDashboardPage() {
                           Date
                         </p>
                         <p className="mt-1 text-xs text-slate-700">
-                          {requirement.date}
+                          {formatDate(requirement.createdAt)}
                         </p>
                       </div>
                     </div>
@@ -1135,9 +1145,8 @@ export default function AdminDashboardPage() {
                 <span className="font-semibold text-[#8e123f]">
                   Live data:
                 </span>{" "}
-                Complaint counts, recent complaints and hostel figures come
-                from the backend. Requirement requests will appear once the
-                Warden and Caretaker modules are connected.
+                Complaint counts, recent complaints, hostel figures and
+                requirement requests are loaded from the backend.
               </p>
             </div>
           </div>

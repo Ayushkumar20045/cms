@@ -1,3 +1,4 @@
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import type { CurrentUser } from "@/lib/api/types";
 import { initials } from "@/lib/format";
 
@@ -13,6 +14,7 @@ export function UserMenu({
 }) {
   return (
     <div className="flex items-center gap-3">
+      {user && <NotificationBell />}
       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#a5174d]/10 text-xs font-bold text-[#a5174d]">
         {user ? initials(user.fullName) : ""}
       </div>

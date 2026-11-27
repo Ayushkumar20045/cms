@@ -3,21 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 
-type WorkStatus =
-  | "ASSIGNED"
-  | "IN PROGRESS"
-  | "WAITING FOR MATERIALS"
-  | "COMPLETED";
-
-interface Assignment {
-  id: string;
-  title: string;
-  student: string;
-  room: string;
-  category: string;
-  status: WorkStatus;
-  updatedAt: string;
-}
+import { StaffStatusBadge } from "@/components/staff/status-badge";
+import { UserMenu } from "@/components/student/user-menu";
+import { staff as staffApi } from "@/lib/api/endpoints";
+import { useLoad, useSession } from "@/lib/session";
+import { staffRow } from "@/lib/staff";
 
 interface DashboardStat {
   label: string;
@@ -25,87 +15,6 @@ interface DashboardStat {
   description: string;
   icon: "assigned" | "pending" | "progress" | "materials" | "completed";
 }
-
-const assignments: Assignment[] = [
-  {
-    id: "CMP-2026-0146",
-    title: "Water leakage in bathroom",
-    student: "Arjun Singh",
-    room: "A-118",
-    category: "Plumbing",
-    status: "IN PROGRESS",
-    updatedAt: "38 min ago",
-  },
-  {
-    id: "CMP-2026-0139",
-    title: "Broken study table",
-    student: "Aditya Verma",
-    room: "B-211",
-    category: "Furniture",
-    status: "WAITING FOR MATERIALS",
-    updatedAt: "2 hrs ago",
-  },
-  {
-    id: "CMP-2026-0137",
-    title: "Door lock replacement",
-    student: "Vikas Kumar",
-    room: "A-307",
-    category: "Maintenance",
-    status: "ASSIGNED",
-    updatedAt: "3 hrs ago",
-  },
-  {
-    id: "CMP-2026-0134",
-    title: "Tube light replacement",
-    student: "Kunal Yadav",
-    room: "A-102",
-    category: "Electrical",
-    status: "COMPLETED",
-    updatedAt: "Yesterday",
-  },
-  {
-    id: "CMP-2026-0129",
-    title: "Window handle repair",
-    student: "Rohit Singh",
-    room: "B-104",
-    category: "Maintenance",
-    status: "COMPLETED",
-    updatedAt: "Yesterday",
-  },
-];
-
-const stats: DashboardStat[] = [
-  {
-    label: "My Assignments",
-    value: 12,
-    description: "Assigned to you",
-    icon: "assigned",
-  },
-  {
-    label: "Pending Work",
-    value: 4,
-    description: "Need attention",
-    icon: "pending",
-  },
-  {
-    label: "In Progress",
-    value: 5,
-    description: "Currently being handled",
-    icon: "progress",
-  },
-  {
-    label: "Waiting for Materials",
-    value: 2,
-    description: "Material required",
-    icon: "materials",
-  },
-  {
-    label: "Completed",
-    value: 18,
-    description: "This month",
-    icon: "completed",
-  },
-];
 
 function StatIcon({ type }: { type: DashboardStat["icon"] }) {
   const common = {
@@ -187,24 +96,6 @@ function StatIcon({ type }: { type: DashboardStat["icon"] }) {
         strokeLinejoin="round"
       />
     </svg>
-  );
-}
-
-function StatusBadge({ status }: { status: WorkStatus }) {
-  const styles: Record<WorkStatus, string> = {
-    ASSIGNED: "bg-violet-50 text-violet-700 border-violet-200",
-    "IN PROGRESS": "bg-sky-50 text-sky-700 border-sky-200",
-    "WAITING FOR MATERIALS":
-      "bg-orange-50 text-orange-700 border-orange-200",
-    COMPLETED: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  };
-
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${styles[status]}`}
-    >
-      {status}
-    </span>
   );
 }
 
@@ -396,15 +287,15 @@ function SidebarHeader({ mobile = false }: { mobile?: boolean }) {
       }`}
     >
       <div
-        className={`flex items-center justify-center overflow-hidden bg-[#f8e9ef] ${
-          mobile ? "h-9 w-9 rounded-lg" : "h-10 w-10 rounded-xl"
+        className={`flex items-center justify-center overflow-hidden ${
+          mobile ? "h-9 w-9" : "h-10 w-10"
         }`}
       >
         <img
           src="/images/gbu-logo.png"
           alt="GBU"
           className={
-            mobile ? "h-7 w-7 object-contain" : "h-8 w-8 object-contain"
+            mobile ? "h-full w-full object-contain" : "h-full w-full object-contain"
           }
         />
       </div>
@@ -417,7 +308,7 @@ function SidebarHeader({ mobile = false }: { mobile?: boolean }) {
   );
 }
 
-function SignedInCard() {
+function SignedInCard({ hostel }: { hostel: string | null }) {
   return (
     <div className="rounded-xl bg-[#fdf3f7] px-3.5 py-3">
       <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#a5174d]">
@@ -425,7 +316,7 @@ function SignedInCard() {
       </p>
       <p className="mt-1 text-sm font-bold text-slate-900">Caretaker</p>
       <p className="mt-0.5 text-xs text-slate-500">
-        Gautam Buddha Boys Hostel
+        {hostel ?? "No hostel assigned"}
       </p>
     </div>
   );
@@ -433,7 +324,26 @@ function SignedInCard() {
 
 export default function CaretakerDashboard() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const visibleAssignments = assignments.slice(0, 5);
+  const { user, signOut } = useSession("caretaker");
+  const ready = Boolean(user);
+  const dashboard = useLoad(() => (ready ? staffApi.dashboard() : Promise.resolve(null)), [ready]);
+  const counts = dashboard.data?.counts;
+  const overview = dashboard.data?.hostel ?? null;
+  const hostelName = overview?.hostel.name ?? user?.hostel?.name ?? null;
+  const visibleAssignments = (dashboard.data?.recent ?? []).map(staffRow);
+  const openWork = counts ? counts.total - counts.resolved : 0;
+  const stats: DashboardStat[] = [
+    { label: "My Assignments", value: counts?.total ?? 0, description: "Assigned to you", icon: "assigned" },
+    { label: "Pending Work", value: counts ? counts.pending + counts.assigned : 0, description: "Not started yet", icon: "pending" },
+    {
+      label: "In Progress",
+      value: counts ? counts.inProgress + counts.waitingForInformation : 0,
+      description: "Currently being handled",
+      icon: "progress",
+    },
+    { label: "Waiting for Materials", value: counts?.waitingForMaterials ?? 0, description: "Material required", icon: "materials" },
+    { label: "Completed", value: counts?.resolved ?? 0, description: "Resolved or closed", icon: "completed" },
+  ];
 
   return (
     <div className="min-h-screen bg-[#f7f7f8] text-slate-900">
@@ -442,7 +352,7 @@ export default function CaretakerDashboard() {
           <SidebarHeader />
 
           <div className="border-b border-slate-100 px-4 py-4">
-            <SignedInCard />
+            <SignedInCard hostel={hostelName} />
           </div>
 
           <Navigation />
@@ -472,7 +382,7 @@ export default function CaretakerDashboard() {
               </div>
 
               <div className="px-3 pt-5">
-                <SignedInCard />
+                <SignedInCard hostel={hostelName} />
               </div>
 
               <Navigation onNavigate={() => setMobileMenuOpen(false)} />
@@ -502,18 +412,7 @@ export default function CaretakerDashboard() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="hidden text-right sm:block">
-                <p className="text-xs font-bold text-slate-800">
-                  Amit Kumar
-                </p>
-                <p className="text-[10px] text-slate-500">Caretaker</p>
-              </div>
-
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f8e9ef] text-xs font-bold text-[#a5174d]">
-                AK
-              </div>
-            </div>
+            <UserMenu user={user} roleLabel="Caretaker" onSignOut={signOut} />
           </header>
 
           <div className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8 lg:py-8">
@@ -613,7 +512,7 @@ export default function CaretakerDashboard() {
                             </p>
 
                             <p className="mt-1 text-xs text-slate-400">
-                              {assignment.id}
+                              {assignment.complaintNumber}
                             </p>
                           </td>
 
@@ -623,7 +522,7 @@ export default function CaretakerDashboard() {
                             </p>
 
                             <p className="mt-1 text-xs text-slate-400">
-                              Room {assignment.room}
+                              {assignment.place}
                             </p>
                           </td>
 
@@ -632,7 +531,7 @@ export default function CaretakerDashboard() {
                           </td>
 
                           <td className="px-5 py-4">
-                            <StatusBadge status={assignment.status} />
+                            <StaffStatusBadge status={assignment.status} completedLabel="COMPLETED" />
                           </td>
 
                           <td className="px-5 py-4 text-xs text-slate-500">
@@ -644,6 +543,12 @@ export default function CaretakerDashboard() {
                   </table>
                 </div>
 
+                {(dashboard.loading || dashboard.error || visibleAssignments.length === 0) && (
+                  <p role={dashboard.error ? "alert" : undefined} className={`px-5 py-8 text-center text-sm ${dashboard.error ? "text-red-600" : "text-slate-500"}`}>
+                    {dashboard.error ?? (dashboard.loading ? "Loading…" : "No work assigned to you yet.")}
+                  </p>
+                )}
+
                 <div className="divide-y divide-slate-100 md:hidden">
                   {visibleAssignments.map((assignment) => (
                     <div key={assignment.id} className="p-4">
@@ -654,11 +559,11 @@ export default function CaretakerDashboard() {
                           </p>
 
                           <p className="mt-1 text-xs text-slate-400">
-                            {assignment.id}
+                            {assignment.complaintNumber}
                           </p>
                         </div>
 
-                        <StatusBadge status={assignment.status} />
+                        <StaffStatusBadge status={assignment.status} completedLabel="COMPLETED" />
                       </div>
 
                       <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
@@ -670,9 +575,9 @@ export default function CaretakerDashboard() {
                         </div>
 
                         <div>
-                          <p className="text-slate-400">Room</p>
+                          <p className="text-slate-400">Location</p>
                           <p className="mt-1 font-medium text-slate-700">
-                            {assignment.room}
+                            {assignment.place}
                           </p>
                         </div>
 
@@ -718,7 +623,7 @@ export default function CaretakerDashboard() {
                       <p className="text-xs text-slate-400">Hostel</p>
 
                       <p className="mt-1 text-sm font-semibold text-slate-800">
-                        Gautam Buddha Boys Hostel
+                        {hostelName ?? "No hostel assigned"}
                       </p>
                     </div>
 
@@ -727,7 +632,7 @@ export default function CaretakerDashboard() {
                         <p className="text-xs text-slate-400">Students</p>
 
                         <p className="mt-1 text-lg font-bold text-slate-900">
-                          312
+                          {overview?.students ?? "–"}
                         </p>
                       </div>
 
@@ -735,7 +640,7 @@ export default function CaretakerDashboard() {
                         <p className="text-xs text-slate-400">My Open Work</p>
 
                         <p className="mt-1 text-lg font-bold text-slate-900">
-                          11
+                          {counts ? openWork : "–"}
                         </p>
                       </div>
                     </div>

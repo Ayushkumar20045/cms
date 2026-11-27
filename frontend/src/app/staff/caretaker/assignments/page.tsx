@@ -1,95 +1,13 @@
+"use client";
+
 import Link from "next/link";
 
-type AssignmentStatus =
-  | "ASSIGNED"
-  | "IN PROGRESS"
-  | "WAITING FOR MATERIALS"
-  | "COMPLETED";
-
-interface Assignment {
-  id: string;
-  title: string;
-  student: string;
-  room: string;
-  category: string;
-  status: AssignmentStatus;
-  updatedAt: string;
-}
-
-const assignments: Assignment[] = [
-  {
-    id: "CMP-2026-0146",
-    title: "Water leakage in bathroom",
-    student: "Arjun Singh",
-    room: "Room A-118",
-    category: "Plumbing",
-    status: "IN PROGRESS",
-    updatedAt: "38 min ago",
-  },
-  {
-    id: "CMP-2026-0139",
-    title: "Broken study table",
-    student: "Aditya Verma",
-    room: "Room B-211",
-    category: "Furniture",
-    status: "WAITING FOR MATERIALS",
-    updatedAt: "2 hrs ago",
-  },
-  {
-    id: "CMP-2026-0137",
-    title: "Door lock replacement",
-    student: "Vikas Kumar",
-    room: "Room A-307",
-    category: "Maintenance",
-    status: "ASSIGNED",
-    updatedAt: "3 hrs ago",
-  },
-  {
-    id: "CMP-2026-0134",
-    title: "Tube light replacement",
-    student: "Kunal Yadav",
-    room: "Room A-102",
-    category: "Electrical",
-    status: "COMPLETED",
-    updatedAt: "Yesterday",
-  },
-  {
-    id: "CMP-2026-0129",
-    title: "Window handle repair",
-    student: "Rohit Singh",
-    room: "Room B-104",
-    category: "Maintenance",
-    status: "COMPLETED",
-    updatedAt: "Yesterday",
-  },
-  {
-    id: "CMP-2026-0125",
-    title: "Washroom tap replacement",
-    student: "Mohit Kumar",
-    room: "Room B-306",
-    category: "Plumbing",
-    status: "IN PROGRESS",
-    updatedAt: "2 days ago",
-  },
-];
-
-const statusStyles: Record<AssignmentStatus, string> = {
-  ASSIGNED: "border-violet-200 bg-violet-50 text-violet-700",
-  "IN PROGRESS": "border-sky-200 bg-sky-50 text-sky-700",
-  "WAITING FOR MATERIALS":
-    "border-orange-200 bg-orange-50 text-orange-700",
-  COMPLETED: "border-emerald-200 bg-emerald-50 text-emerald-700",
-};
-
-function StatusBadge({ status }: { status: AssignmentStatus }) {
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusStyles[status]}`}
-    >
-      {status}
-    </span>
-  );
-}
+import { DecisionNote, RequestActions } from "@/components/complaints/request-actions";
+import { StaffStatusBadge } from "@/components/staff/status-badge";
+import { UserMenu } from "@/components/student/user-menu";
+import { complaints as complaintsApi } from "@/lib/api/endpoints";
+import { useLoad, useSession } from "@/lib/session";
+import { isCompleted, staffRow } from "@/lib/staff";
 
 function SidebarIcon({
   type,
@@ -162,11 +80,11 @@ function SidebarIcon({
 function SidebarHeader() {
   return (
     <div className="flex h-20 items-center gap-3 border-b border-slate-100 px-6">
-      <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-[#f8e9ef]">
+      <div className="flex h-10 w-10 items-center justify-center">
         <img
           src="/images/gbu-logo.png"
           alt="GBU"
-          className="h-8 w-8 object-contain"
+          className="h-full w-full object-contain"
         />
       </div>
 
@@ -178,7 +96,7 @@ function SidebarHeader() {
   );
 }
 
-function SignedInCard() {
+function SignedInCard({ hostel }: { hostel: string | null }) {
   return (
     <div className="rounded-xl bg-[#fdf3f7] px-3.5 py-3">
       <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#a5174d]">
@@ -188,7 +106,7 @@ function SignedInCard() {
       <p className="mt-1 text-sm font-bold text-slate-900">Caretaker</p>
 
       <p className="mt-0.5 text-xs text-slate-500">
-        Gautam Buddha Boys Hostel
+        {hostel ?? "No hostel assigned"}
       </p>
     </div>
   );
@@ -239,18 +157,16 @@ function Navigation() {
 }
 
 export default function CaretakerAssignmentsPage() {
-  const totalAssignments = assignments.length;
-  const activeAssignments = assignments.filter(
-    (assignment) =>
-      assignment.status === "ASSIGNED" ||
-      assignment.status === "IN PROGRESS",
-  ).length;
-  const waitingAssignments = assignments.filter(
-    (assignment) => assignment.status === "WAITING FOR MATERIALS",
-  ).length;
-  const completedAssignments = assignments.filter(
-    (assignment) => assignment.status === "COMPLETED",
-  ).length;
+  const { user, signOut } = useSession("caretaker");
+  const ready = Boolean(user);
+  const list = useLoad(() => (ready ? complaintsApi.list({ limit: 100 }) : Promise.resolve(null)), [ready]);
+  const rows = (list.data?.data ?? []).map(staffRow);
+  const hostelName = user?.hostel?.name ?? null;
+  const assignments = rows;
+  const totalAssignments = list.data?.pagination.total ?? 0;
+  const completedAssignments = rows.filter((row) => isCompleted(row.status)).length;
+  const waitingAssignments = rows.filter((row) => row.status === "WAITING_FOR_MATERIALS").length;
+  const activeAssignments = rows.length - completedAssignments - waitingAssignments;
 
   return (
     <div className="min-h-screen bg-[#f7f7f8] text-slate-900">
@@ -259,7 +175,7 @@ export default function CaretakerAssignmentsPage() {
           <SidebarHeader />
 
           <div className="border-b border-slate-100 px-4 py-4">
-            <SignedInCard />
+            <SignedInCard hostel={hostelName} />
           </div>
 
           <Navigation />
@@ -277,16 +193,7 @@ export default function CaretakerAssignmentsPage() {
               </h1>
             </div>
 
-            <div className="flex items-center gap-3">
-              <div className="hidden text-right sm:block">
-                <p className="text-xs font-bold text-slate-800">Amit Kumar</p>
-                <p className="text-[10px] text-slate-500">Caretaker</p>
-              </div>
-
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f8e9ef] text-xs font-bold text-[#a5174d]">
-                AK
-              </div>
-            </div>
+            <UserMenu user={user} roleLabel="Caretaker" onSignOut={signOut} />
           </header>
 
           <div className="mx-auto max-w-[1440px] px-4 py-7 sm:px-6 lg:px-8 lg:py-8">
@@ -381,7 +288,7 @@ export default function CaretakerAssignmentsPage() {
               </div>
 
               <div className="hidden overflow-x-auto md:block">
-                <table className="w-full min-w-[850px]">
+                <table className="w-full min-w-[1000px]">
                   <thead>
                     <tr className="border-b border-slate-100 text-left">
                       <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
@@ -403,6 +310,10 @@ export default function CaretakerAssignmentsPage() {
                       <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                         Updated
                       </th>
+
+                      <th className="px-5 py-3 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                        Actions
+                      </th>
                     </tr>
                   </thead>
 
@@ -415,7 +326,7 @@ export default function CaretakerAssignmentsPage() {
                           </p>
 
                           <p className="mt-1 text-xs text-slate-400">
-                            {assignment.id}
+                            {assignment.complaintNumber}
                           </p>
                         </td>
 
@@ -425,7 +336,7 @@ export default function CaretakerAssignmentsPage() {
                           </p>
 
                           <p className="mt-1 text-xs text-slate-400">
-                            {assignment.room}
+                            {assignment.place}
                           </p>
                         </td>
 
@@ -434,17 +345,28 @@ export default function CaretakerAssignmentsPage() {
                         </td>
 
                         <td className="px-5 py-4">
-                          <StatusBadge status={assignment.status} />
+                          <StaffStatusBadge status={assignment.status} completedLabel="COMPLETED" />
+                          <DecisionNote complaint={assignment.raw} />
                         </td>
 
                         <td className="px-5 py-4 text-xs text-slate-500">
                           {assignment.updatedAt}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <RequestActions complaint={assignment.raw} user={user} onChanged={list.reload} />
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              {(list.loading || list.error || rows.length === 0) && (
+                <p role={list.error ? "alert" : undefined} className={`px-5 py-8 text-center text-sm ${list.error ? "text-red-600" : "text-slate-500"}`}>
+                  {list.error ?? (list.loading ? "Loading…" : "No work assigned to you yet.")}
+                </p>
+              )}
 
               <div className="divide-y divide-slate-100 md:hidden">
                 {assignments.map((assignment) => (
@@ -456,11 +378,17 @@ export default function CaretakerAssignmentsPage() {
                         </p>
 
                         <p className="mt-1 text-xs text-slate-400">
-                          {assignment.id}
+                          {assignment.complaintNumber}
                         </p>
                       </div>
 
-                      <StatusBadge status={assignment.status} />
+                      <StaffStatusBadge status={assignment.status} completedLabel="COMPLETED" />
+                    </div>
+
+                    <DecisionNote complaint={assignment.raw} />
+
+                    <div className="mt-3">
+                      <RequestActions complaint={assignment.raw} user={user} onChanged={list.reload} />
                     </div>
 
                     <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
@@ -472,9 +400,9 @@ export default function CaretakerAssignmentsPage() {
                       </div>
 
                       <div>
-                        <p className="text-slate-400">Room</p>
+                        <p className="text-slate-400">Location</p>
                         <p className="mt-1 font-medium text-slate-700">
-                          {assignment.room}
+                          {assignment.place}
                         </p>
                       </div>
 

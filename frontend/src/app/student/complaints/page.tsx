@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import { DecisionNote } from "@/components/complaints/request-actions";
 import { StatusBadge } from "@/components/student/status-badge";
 import { UserMenu } from "@/components/student/user-menu";
 import { complaints as complaintsApi, student } from "@/lib/api/endpoints";
@@ -193,7 +194,7 @@ export default function MyComplaintsPage() {
               className="flex items-center gap-3"
               aria-label="Student dashboard"
             >
-              <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="flex h-9 w-9 items-center justify-center">
                 <img
                   src="/images/gbu-logo.png"
                   alt="Gautam Buddha University"
@@ -235,6 +236,17 @@ export default function MyComplaintsPage() {
               >
                 <ComplaintIcon />
                 <span>My Complaints</span>
+              </Link>
+
+              <Link
+                href="/student/map"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-800"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-[18px] w-[18px]">
+                  <path d="m9 4-5 2v14l5-2 6 2 5-2V4l-5 2-6-2Z" strokeLinejoin="round" />
+                  <path d="M9 4v14M15 6v14" />
+                </svg>
+                <span>Campus Map</span>
               </Link>
             </div>
           </nav>
@@ -426,9 +438,9 @@ export default function MyComplaintsPage() {
                                   {complaint.title}
                                 </p>
 
-                                <p className="mt-1 text-[11px] text-slate-400">
+                                <Link href={`/tickets/${complaint.complaintNumber}`} className="mt-1 block text-[11px] font-semibold text-[#a5174d] hover:underline">
                                   {complaint.complaintNumber}
-                                </p>
+                                </Link>
                               </div>
                             </td>
 
@@ -438,6 +450,7 @@ export default function MyComplaintsPage() {
 
                             <td className="px-5 py-4">
                               <StatusBadge status={complaint.status} />
+                              <DecisionNote complaint={complaint} />
                             </td>
 
                             <td className="px-5 py-4 text-xs text-slate-500">
@@ -465,13 +478,15 @@ export default function MyComplaintsPage() {
                               {complaint.title}
                             </p>
 
-                            <p className="mt-1 text-[11px] text-slate-400">
+                            <Link href={`/tickets/${complaint.complaintNumber}`} className="mt-1 block text-[11px] font-semibold text-[#a5174d] hover:underline">
                               {complaint.complaintNumber}
-                            </p>
+                            </Link>
                           </div>
 
                           <StatusBadge status={complaint.status} />
                         </div>
+
+                        <DecisionNote complaint={complaint} />
 
                         <div className="mt-4 grid grid-cols-2 gap-4">
                           <div>
