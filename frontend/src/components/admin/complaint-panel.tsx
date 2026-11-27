@@ -150,7 +150,9 @@ export function ComplaintPanel({ id, onClose, onChanged }: { id: string; onClose
       title={c.title}
       subtitle={
         <span className="flex flex-wrap items-center gap-2">
-          <span className="font-bold text-[#a5174d]">{c.complaintNumber}</span>
+          <a href={`/tickets/${c.complaintNumber}`} className="font-bold text-[#a5174d] hover:underline" title="Open the full ticket page">
+            {c.complaintNumber} ↗
+          </a>
           <StaffStatusBadge status={c.status} />
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">{c.priority}</span>
           {c.isOverdue && <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700">OVERDUE</span>}

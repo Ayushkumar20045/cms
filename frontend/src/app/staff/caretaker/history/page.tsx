@@ -256,6 +256,14 @@ function WorkHistorySidebar() {
           </Link>
 
           <Link
+            href="/board"
+            className="h-2 w-2 rounded-full bg-slate-300"
+          >
+            <span className="h-2 w-2 rounded-full bg-slate-300" />
+            Ticket Board
+          </Link>
+
+          <Link
             href="/staff/caretaker/requirements"
             className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
           >

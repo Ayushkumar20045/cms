@@ -229,7 +229,15 @@ function Navigation() {
         </Link>
 
         <Link
-          href="/staff/requirements"
+          href="/board"
+          className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+        >
+          <SidebarIcon type="assignments" />
+          <span>Ticket Board</span>
+        </Link>
+
+        <Link
+          href="/staff/caretaker/requirements"
           className="flex items-center gap-3 rounded-lg bg-[#f8e9ef] px-3 py-2.5 text-sm font-medium text-[#a5174d]"
         >
           <SidebarIcon type="requirements" />

@@ -63,47 +63,6 @@ export function useSession(area: Area) {
   useEffect(() => {
     let active = true;
 
-    // Temporary local preview mode. Never enabled in production.
-    if (process.env.NODE_ENV === "development") {
-      const previewRoles: Record<Area, string> = {
-        student: "STUDENT",
-        admin: "ADMIN",
-        warden: "WARDEN",
-        caretaker: "CARETAKER",
-        "department-head": "DEPARTMENT_HEAD",
-        supervisor: "SUPERVISOR",
-        store: "STORE_MANAGER",
-        technician: "TECHNICIAN",
-        authority: "AUTHORITY",
-        board: "ADMIN",
-        any: "STUDENT",
-      };
-
-      const role = previewRoles[area];
-      const previewUser: CurrentUser = {
-        id: `preview-${area}`,
-        loginId: `preview-${area}`,
-        email: null,
-        firstName: "Preview",
-        lastName: "User",
-        fullName: `Preview ${area.replace("-", " ")}`,
-        phone: null,
-        status: "ACTIVE",
-        roles: [role],
-        permissions: [],
-        hostel: null,
-        roomNumber: null,
-        block: null,
-        department: null,
-      };
-
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- temporary development preview session
-      setUser(previewUser);
-      return () => {
-        active = false;
-      };
-    }
-
     auth
       .me()
       .then((me) => {
@@ -124,11 +83,6 @@ export function useSession(area: Area) {
   }, [area, router]);
 
   const signOut = useCallback(async () => {
-    if (process.env.NODE_ENV === "development") {
-      router.replace("/");
-      return;
-    }
-
     try {
       await auth.logout();
     } finally {

@@ -238,8 +238,14 @@ const navigation = [
     active: false,
   },
   {
+    label: "Ticket Board",
+    href: "/board",
+    icon: "assignments" as const,
+    active: false,
+  },
+  {
     label: "Requirements",
-    href: "/staff/requirements",
+    href: "/staff/caretaker/requirements",
     icon: "requirements" as const,
     active: false,
   },

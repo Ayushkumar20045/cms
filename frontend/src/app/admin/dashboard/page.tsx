@@ -307,11 +307,11 @@ function AdminSidebar() {
           className="flex items-center gap-3"
           aria-label="GBU Complaint Management System home"
         >
-          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-[#f8e9ef]">
+          <div className="flex h-10 w-10 items-center justify-center">
             <img
               src="/images/gbu-logo.png"
               alt="GBU"
-              className="h-8 w-8 object-contain"
+              className="h-full w-full object-contain"
             />
           </div>
 

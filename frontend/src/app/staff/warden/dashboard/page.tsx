@@ -238,6 +238,12 @@ const mainNavigation = [
     active: true,
   },
   {
+    label: "Ticket Board",
+    href: "/board",
+    icon: "dashboard" as const,
+    active: false,
+  },
+  {
     label: "Requirements",
     href: "/staff/requirements",
     icon: "requirements" as const,
