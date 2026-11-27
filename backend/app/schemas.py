@@ -582,6 +582,45 @@ class StaffHostel(Camel):
     active_issues: int
 
 
+class HostelStudent(Camel):
+    """A student living in the warden's hostel, with their complaint counts."""
+    id: uuid.UUID
+    full_name: str
+    login_id: str
+    email: str | None
+    phone: str | None
+    block: str | None
+    room_number: str | None
+    status: UserStatus
+    open_complaints: int
+    total_complaints: int
+
+
+class StaffContact(Camel):
+    id: uuid.UUID
+    full_name: str
+    email: str | None
+    phone: str | None
+
+
+class WardenHostel(Camel):
+    """The warden's own hostel: details, staff and how its complaints stand."""
+    hostel: HostelBrief
+    building_name: str | None
+    on_map: bool
+    capacity: int | None
+    contact_phone: str | None
+    contact_email: str | None
+    students: int
+    open_complaints: int
+    resolved_complaints: int
+    total_complaints: int
+    wardens: list[StaffContact]
+    caretakers: list[StaffContact]
+    by_category: list[NamedCount]
+    by_status: list[NamedCount]
+
+
 class StaffDashboard(Camel):
     """Counts and recent requests within the signed-in staff member's scope (their hostel, department or assignments)."""
     counts: StaffCounts
