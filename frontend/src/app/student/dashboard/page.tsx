@@ -248,7 +248,7 @@ export default function StudentDashboard() {
                 </p>
 
                 <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
-                  Here is your complaint overview.
+                  Here's your complaint overview.
                 </h2>
 
                 <p className="mt-1.5 max-w-xl text-sm text-slate-500">
