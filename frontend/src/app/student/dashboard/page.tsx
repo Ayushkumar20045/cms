@@ -7,7 +7,7 @@ import { UserMenu } from "@/components/student/user-menu";
 import { student } from "@/lib/api/endpoints";
 import type { ComplaintStatus } from "@/lib/api/types";
 import { formatDate, studentStatusLabel, timeAgo } from "@/lib/format";
-import { useLoad, useSession } from "@/lib/session";
+import { useLoad, useSession, requesterPortal, requesterRole } from "@/lib/session";
 
 const activityDot: Partial<Record<ComplaintStatus, string>> = {
   RESOLVED: "bg-emerald-500",
@@ -157,6 +157,8 @@ export default function StudentDashboard() {
   const summary = profile.data?.summary;
   const complaints = recent.data?.data ?? [];
   const hostelUser = profile.data?.user ?? user;
+  // Faculty and staff live in campus quarters, not hostels
+  const showResidence = !hostelUser?.hostel && (Boolean(hostelUser?.residence) || requesterRole(user) !== "Student");
 
   return (
     <main className="min-h-screen bg-[#f7f7f8] text-slate-900">
@@ -181,7 +183,7 @@ export default function StudentDashboard() {
                   GBU
                 </p>
                 <p className="text-[10px] text-slate-400">
-                  Student Portal
+                  {requesterPortal(user)}
                 </p>
               </div>
             </Link>
@@ -230,14 +232,14 @@ export default function StudentDashboard() {
           <header className="flex h-[76px] items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-8">
             <div>
               <p className="text-xs font-medium text-slate-400">
-                Student Portal
+                {requesterPortal(user)}
               </p>
               <h1 className="mt-0.5 text-lg font-semibold tracking-tight text-slate-900">
                 Dashboard
               </h1>
             </div>
 
-            <UserMenu user={user} roleLabel="Student" onSignOut={signOut} />
+            <UserMenu user={user} roleLabel={requesterRole(user)} onSignOut={signOut} />
           </header>
 
           <div className="mx-auto max-w-[1350px] px-5 py-7 sm:px-8">
@@ -477,46 +479,81 @@ export default function StudentDashboard() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h3 className="text-sm font-semibold text-slate-900">
-                  Your Hostel
-                </h3>
+              {showResidence ? (
+                <div className="rounded-xl border border-slate-200 bg-white p-5">
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Your Residence
+                  </h3>
 
-                <p className="mt-0.5 text-xs text-slate-400">
-                  Information from university records
-                </p>
-
-                <div className="mt-5 rounded-lg bg-slate-50 p-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                    Hostel
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    Your quarters on campus
                   </p>
 
-                  <p className="mt-1 text-sm font-semibold text-slate-800">
-                    {hostelUser?.hostel?.name ?? "Not allocated"}
-                  </p>
+                  <div className="mt-5 rounded-lg bg-slate-50 p-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      Quarters
+                    </p>
 
-                  <div className="mt-4 grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-[10px] text-slate-400">Room</p>
-                      <p className="mt-1 text-xs font-medium text-slate-700">
-                        {hostelUser?.roomNumber ?? "—"}
-                      </p>
-                    </div>
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      {hostelUser?.residence?.name ?? "Not recorded"}
+                    </p>
 
-                    <div>
-                      <p className="text-[10px] text-slate-400">Block</p>
+                    <div className="mt-4">
+                      <p className="text-[10px] text-slate-400">House / Flat</p>
                       <p className="mt-1 text-xs font-medium text-slate-700">
-                        {hostelUser?.block ?? "—"}
+                        {hostelUser?.residenceUnit ?? "—"}
                       </p>
                     </div>
                   </div>
-                </div>
 
-                <p className="mt-4 text-[10px] leading-4 text-slate-400">
-                  Hostel information is managed through the university
-                  allocation system.
-                </p>
-              </div>
+                  <p className="mt-4 text-[10px] leading-4 text-slate-400">
+                    {hostelUser?.residence
+                      ? "Complaints you raise without choosing a place are filed for this address."
+                      : "Ask the administration to record your quarters so complaints fill in your address."}
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-slate-200 bg-white p-5">
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Your Hostel
+                  </h3>
+
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    Information from university records
+                  </p>
+
+                  <div className="mt-5 rounded-lg bg-slate-50 p-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      Hostel
+                    </p>
+
+                    <p className="mt-1 text-sm font-semibold text-slate-800">
+                      {hostelUser?.hostel?.name ?? "Not allocated"}
+                    </p>
+
+                    <div className="mt-4 grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] text-slate-400">Room</p>
+                        <p className="mt-1 text-xs font-medium text-slate-700">
+                          {hostelUser?.roomNumber ?? "—"}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[10px] text-slate-400">Block</p>
+                        <p className="mt-1 text-xs font-medium text-slate-700">
+                          {hostelUser?.block ?? "—"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="mt-4 text-[10px] leading-4 text-slate-400">
+                    Hostel information is managed through the university
+                    allocation system.
+                  </p>
+                </div>
+              )}
             </section>
           </div>
         </section>

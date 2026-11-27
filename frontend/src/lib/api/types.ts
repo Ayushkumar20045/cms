@@ -88,6 +88,15 @@ export interface CurrentUser {
   roomNumber: string | null;
   block: string | null;
   department: DepartmentBrief | null;
+  /** Faculty or staff quarters on campus, and the house or flat number */
+  residence?: ResidenceBrief | null;
+  residenceUnit?: string | null;
+}
+
+export interface ResidenceBrief {
+  id: number;
+  code: string;
+  name: string;
 }
 
 export interface LoginResult {
@@ -349,6 +358,8 @@ export interface AdminUser {
   roomNumber: string | null;
   block: string | null;
   department: DepartmentBrief | null;
+  residence?: ResidenceBrief | null;
+  residenceUnit?: string | null;
   lastLoginAt: string | null;
   createdAt: string;
 }
@@ -365,6 +376,8 @@ export interface UserInput {
   roomNumber?: string | null;
   block?: string | null;
   departmentId?: number | null;
+  residenceBuildingId?: number | null;
+  residenceUnit?: string | null;
 }
 
 export interface AdminHostel {

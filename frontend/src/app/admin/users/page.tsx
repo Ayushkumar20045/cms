@@ -5,7 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { Dialog, Field, Message, Pager, Panel, filterClass, inputClass, primaryButton, secondaryButton } from "@/components/admin/ui";
 import { ApiError } from "@/lib/api/client";
-import { admin } from "@/lib/api/endpoints";
+import { admin, locations } from "@/lib/api/endpoints";
 import type { AdminUser, UserInput, UserStatus } from "@/lib/api/types";
 import { formatDate, timeAgo } from "@/lib/format";
 import { useLoad, useSession } from "@/lib/session";
@@ -14,6 +14,8 @@ const roleLabel = (r: string) => r.replace(/_/g, " ").toLowerCase().replace(/\b\
 const PRIVILEGED = ["ADMIN", "SUPER_ADMIN"];
 const HOSTEL_ROLES = ["STUDENT", "WARDEN", "CARETAKER"];
 const DEPARTMENT_ROLES = ["TECHNICIAN", "SUPERVISOR", "DEPARTMENT_HEAD"];
+// Faculty and non-teaching staff may live in campus quarters
+const RESIDENT_ROLES = ["FACULTY", "STAFF"];
 
 type Editing = { mode: "create" } | { mode: "edit"; user: AdminUser } | { mode: "password"; user: AdminUser };
 
@@ -35,6 +37,8 @@ function UserForm({
   const existing = editing.mode === "create" ? null : editing.user;
   const hostels = useLoad(() => admin.hostels(), []);
   const departments = useLoad(() => admin.departments(), []);
+  const buildings = useLoad(() => locations.buildings(), []);
+  const quarters = (buildings.data ?? []).filter((b) => b.buildingType === "RESIDENTIAL" && b.isActive);
   const [form, setForm] = useState({
     loginId: "",
     password: "",
@@ -47,6 +51,8 @@ function UserForm({
     roomNumber: existing?.roomNumber ?? "",
     block: existing?.block ?? "",
     departmentId: existing?.department?.id ? String(existing.department.id) : "",
+    residenceBuildingId: existing?.residence?.id ? String(existing.residence.id) : "",
+    residenceUnit: existing?.residenceUnit ?? "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -54,6 +60,7 @@ function UserForm({
   const set = (key: keyof typeof form, value: string | string[]) => setForm((f) => ({ ...f, [key]: value }));
   const needsHostel = form.roles.some((r) => HOSTEL_ROLES.includes(r));
   const needsDepartment = form.roles.some((r) => DEPARTMENT_ROLES.includes(r));
+  const canHaveResidence = form.roles.some((r) => RESIDENT_ROLES.includes(r));
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -70,6 +77,8 @@ function UserForm({
       roomNumber: form.roles.includes("STUDENT") ? form.roomNumber.trim() || null : null,
       block: form.roles.includes("STUDENT") ? form.block.trim() || null : null,
       departmentId: needsDepartment && form.departmentId ? Number(form.departmentId) : null,
+      residenceBuildingId: canHaveResidence && form.residenceBuildingId ? Number(form.residenceBuildingId) : null,
+      residenceUnit: canHaveResidence && form.residenceBuildingId ? form.residenceUnit.trim() || null : null,
     };
     try {
       if (existing) {
@@ -161,6 +170,40 @@ function UserForm({
               </Field>
               <Field label="Room" htmlFor="roomNumber">
                 <input id="roomNumber" className={inputClass} value={form.roomNumber} onChange={(e) => set("roomNumber", e.target.value)} />
+              </Field>
+            </div>
+          )}
+          {canHaveResidence && (
+            <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+              <Field
+                label="Residence (campus quarters)"
+                htmlFor="residenceBuildingId"
+                error={errors.residenceBuildingId}
+                hint={quarters.length ? "Used when they raise a complaint without choosing a place" : "No quarters on the campus map yet"}
+              >
+                <select
+                  id="residenceBuildingId"
+                  className={inputClass}
+                  value={form.residenceBuildingId}
+                  onChange={(e) => set("residenceBuildingId", e.target.value)}
+                >
+                  <option value="">Does not live on campus</option>
+                  {quarters.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="House / flat number" htmlFor="residenceUnit" error={errors.residenceUnit}>
+                <input
+                  id="residenceUnit"
+                  className={inputClass}
+                  value={form.residenceUnit}
+                  maxLength={40}
+                  disabled={!form.residenceBuildingId}
+                  onChange={(e) => set("residenceUnit", e.target.value)}
+                />
               </Field>
             </div>
           )}
@@ -333,7 +376,7 @@ export default function AdminUsersPage() {
                 <tr className="border-b border-slate-200 bg-slate-50/70 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
                   <th className="px-5 py-3">User</th>
                   <th className="px-4 py-3">Roles</th>
-                  <th className="px-4 py-3">Hostel / Department</th>
+                  <th className="px-4 py-3">Hostel / Department / Residence</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Last sign-in</th>
                   <th className="px-4 py-3 text-right">Actions</th>
@@ -359,8 +402,11 @@ export default function AdminUsersPage() {
                       </div>
                     </td>
                     <td className="px-4 py-4 text-xs text-slate-600">
-                      {u.hostel?.name ?? u.department?.name ?? "—"}
+                      {u.hostel?.name ?? u.department?.name ?? u.residence?.name ?? "—"}
                       {u.roomNumber ? <span className="block text-[11px] text-slate-400">Room {u.roomNumber}</span> : null}
+                      {!u.hostel && !u.department && u.residenceUnit ? (
+                        <span className="block text-[11px] text-slate-400">House {u.residenceUnit}</span>
+                      ) : null}
                     </td>
                     <td className="px-4 py-4">
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${u.status === "ACTIVE" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>

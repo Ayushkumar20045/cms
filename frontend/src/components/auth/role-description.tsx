@@ -7,6 +7,8 @@ interface RoleDescriptionProps {
 const descriptions: Record<UserRole, string> = {
   student:
     "Raise complaints, track progress and stay updated throughout the resolution process.",
+  faculty:
+    "For faculty and non-teaching staff: report problems in your department, classroom or campus residence and track them.",
   staff:
     "Manage hostel complaints, communicate with students and raise facility requests.",
   admin:

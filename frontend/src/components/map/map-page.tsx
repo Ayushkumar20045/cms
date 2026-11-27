@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { CampusMap } from "@/components/map/campus-map";
 import { UserMenu } from "@/components/student/user-menu";
-import { useSession } from "@/lib/session";
+import { requesterPortal, requesterRole, useSession } from "@/lib/session";
 
 /** Page shell for the campus map, shared by the requester and admin portals. */
 export function MapPage({
@@ -34,11 +34,11 @@ export function MapPage({
             <img src="/images/gbu-logo.png" alt="" className="h-full w-full object-contain" />
           </Link>
           <div>
-            <p className="text-xs font-medium text-slate-400">{portalLabel}</p>
+            <p className="text-xs font-medium text-slate-400">{area === "student" ? requesterPortal(user) : portalLabel}</p>
             <h1 className="mt-0.5 text-lg font-semibold tracking-tight text-slate-900">Campus Map</h1>
           </div>
         </div>
-        <UserMenu user={user} roleLabel={roleLabel} onSignOut={signOut} />
+        <UserMenu user={user} roleLabel={area === "student" ? requesterRole(user) : roleLabel} onSignOut={signOut} />
       </header>
 
       <div className="mx-auto max-w-[1400px] px-5 py-7 sm:px-8">

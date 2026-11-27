@@ -7,7 +7,7 @@ import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { ApiError } from "@/lib/api/client";
 import { complaints as complaintsApi, locations as locationsApi } from "@/lib/api/endpoints";
 import { initials } from "@/lib/format";
-import { useLoad, useSession } from "@/lib/session";
+import { useLoad, useSession, requesterRole } from "@/lib/session";
 
 type ComplaintCategory = string;
 
@@ -184,10 +184,18 @@ export default function RaiseComplaintPage() {
     () => (ready ? locationsApi.buildings() : Promise.resolve(null)),
     [ready],
   );
-  // Hostel residents may leave the building empty: the server then uses their own hostel and room
+  // Hostel residents and faculty or staff living in campus quarters may leave the building empty: the server
+  // then uses their own hostel room or house
   const ownHostel = user?.hostel ?? null;
+  const ownResidence = ownHostel ? null : (user?.residence ?? null);
+  const ownPlaceLabel = ownHostel
+    ? `My hostel (${ownHostel.name})`
+    : ownResidence
+      ? `My residence (${ownResidence.name}${user?.residenceUnit ? `, ${user.residenceUnit}` : ""})`
+      : null;
   const buildings = (buildingList.data ?? []).filter(
-    (item) => !ownHostel || item.hostel?.id !== ownHostel.id,
+    (item) =>
+      !(ownHostel && item.hostel?.id === ownHostel.id) && !(ownResidence && item.id === ownResidence.id),
   );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -328,7 +336,7 @@ export default function RaiseComplaintPage() {
       setCategoryError("");
     }
 
-    if (!buildingId && !ownHostel) {
+    if (!buildingId && !ownPlaceLabel) {
       setLocationError("Please choose the building where the problem is.");
       isValid = false;
     } else {
@@ -427,7 +435,7 @@ export default function RaiseComplaintPage() {
                   GBU Portal
                 </p>
                 <p className="mt-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-slate-400">
-                  Student Services
+                  {requesterRole(user)} Services
                 </p>
               </div>
             </Link>
@@ -464,7 +472,7 @@ export default function RaiseComplaintPage() {
             <p className="text-[11px] leading-5 text-slate-400">
               Gautam Buddha University
               <br />
-              Student Services Portal
+              {requesterRole(user)} Services Portal
             </p>
           </div>
         </aside>
@@ -489,7 +497,7 @@ export default function RaiseComplaintPage() {
                   GBU Portal
                 </p>
                 <p className="text-[10px] text-slate-400">
-                  Student Services
+                  {requesterRole(user)} Services
                 </p>
               </div>
             </div>
@@ -654,7 +662,7 @@ export default function RaiseComplaintPage() {
                   <fieldset>
                     <legend className="mb-2 block text-sm font-semibold text-slate-700">
                       Location{" "}
-                      {ownHostel ? (
+                      {ownPlaceLabel ? (
                         <span className="font-normal text-slate-400">
                           (Optional)
                         </span>
@@ -684,9 +692,7 @@ export default function RaiseComplaintPage() {
                         }`}
                           >
                             <option value="">
-                              {ownHostel
-                                ? `My hostel (${ownHostel.name})`
-                                : "Select building"}
+                              {ownPlaceLabel ?? "Select building"}
                             </option>
                             {buildings.map((item) => (
                               <option key={item.id} value={item.id}>
@@ -746,8 +752,8 @@ export default function RaiseComplaintPage() {
                         setLocationError("");
                       }}
                       placeholder={
-                        ownHostel && !buildingId
-                          ? "Your hostel room is used unless you describe another spot"
+                        ownPlaceLabel && !buildingId
+                          ? `Your ${ownHostel ? "hostel room" : "house"} is used unless you describe another spot`
                           : "Exact spot, e.g. near the main stairs"
                       }
                       className="mt-3 h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition-all focus:border-[#a5174d] focus:ring-4 focus:ring-[#a5174d]/10"
@@ -954,7 +960,7 @@ export default function RaiseComplaintPage() {
                       </div>
 
                       <p className="text-xs leading-5 text-slate-600">
-                        Your student and hostel details are already
+                        Your account details{ownPlaceLabel ? " and address" : ""} are already
                         associated with your university account. You do not
                         need to enter them again while submitting this
                         complaint.

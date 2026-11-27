@@ -26,6 +26,11 @@ const roleLoginConfig: Record<UserRole, RoleLoginConfig> = {
     identifierPlaceholder: "Enter your university login ID",
     submitLabel: "Sign In as Student",
   },
+  faculty: {
+    identifierLabel: "Faculty / Employee ID",
+    identifierPlaceholder: "Enter your faculty or employee ID",
+    submitLabel: "Sign In as Faculty",
+  },
   staff: {
     identifierLabel: "Staff ID",
     identifierPlaceholder: "Enter your staff ID",

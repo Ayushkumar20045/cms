@@ -24,6 +24,15 @@ export const STAFF_PORTALS: Record<StaffPortalRole, { role: string; label: strin
 const REQUESTER_ROLES = ["STUDENT", "FACULTY", "STAFF"];
 const isRequester = (user: CurrentUser) => user.roles.some((role) => REQUESTER_ROLES.includes(role));
 
+/** "Faculty", "Staff" or "Student": the requester pages are shared, but each sees its own name. */
+export function requesterRole(user: CurrentUser | null): "Student" | "Faculty" | "Staff" {
+  if (user?.roles.includes("FACULTY")) return "Faculty";
+  if (user?.roles.includes("STAFF")) return "Staff";
+  return "Student";
+}
+
+export const requesterPortal = (user: CurrentUser | null) => `${requesterRole(user)} Portal`;
+
 // Same precedence as the backend's login redirect
 export const homeFor = (user: CurrentUser): string => {
   const has = (role: string) => user.roles.includes(role);

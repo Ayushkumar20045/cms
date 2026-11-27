@@ -9,7 +9,7 @@ import { UserMenu } from "@/components/student/user-menu";
 import { complaints as complaintsApi, student } from "@/lib/api/endpoints";
 import type { ComplaintStatus } from "@/lib/api/types";
 import { allStatuses, formatDate, studentStatusLabel } from "@/lib/format";
-import { useLoad, useSession } from "@/lib/session";
+import { useLoad, useSession, requesterPortal, requesterRole } from "@/lib/session";
 
 const ALL_CATEGORIES = "All Categories";
 const ALL_STATUS = "All Status";
@@ -207,7 +207,7 @@ export default function MyComplaintsPage() {
                   GBU
                 </p>
                 <p className="text-[10px] text-slate-400">
-                  Student Portal
+                  {requesterPortal(user)}
                 </p>
               </div>
             </Link>
@@ -256,7 +256,7 @@ export default function MyComplaintsPage() {
           <header className="flex h-[76px] items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-8">
             <div>
               <p className="text-xs font-medium text-slate-400">
-                Student Portal
+                {requesterPortal(user)}
               </p>
 
               <h1 className="mt-0.5 text-lg font-semibold tracking-tight text-slate-900">
@@ -264,7 +264,7 @@ export default function MyComplaintsPage() {
               </h1>
             </div>
 
-            <UserMenu user={user} roleLabel="Student" onSignOut={signOut} />
+            <UserMenu user={user} roleLabel={requesterRole(user)} onSignOut={signOut} />
           </header>
 
           <div className="mx-auto max-w-[1350px] px-5 py-7 sm:px-8">

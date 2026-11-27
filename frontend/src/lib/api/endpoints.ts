@@ -34,7 +34,7 @@ import type {
   UserBrief,
 } from "./types";
 
-export type Portal = "student" | "staff" | "admin";
+export type Portal = "student" | "faculty" | "staff" | "admin";
 
 export type StaffRole =
   | "warden"

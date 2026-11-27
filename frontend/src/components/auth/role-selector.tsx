@@ -2,7 +2,7 @@
 
 import type { Dispatch, SetStateAction } from "react";
 
-export type UserRole = "student" | "staff" | "admin";
+export type UserRole = "student" | "faculty" | "staff" | "admin";
 
 interface RoleSelectorProps {
   value: UserRole;
@@ -25,6 +25,11 @@ const roles: Array<{
     icon: "users",
   },
   {
+    value: "faculty",
+    label: "Faculty",
+    icon: "book",
+  },
+  {
     value: "student",
     label: "Student",
     icon: "graduation",
@@ -32,6 +37,25 @@ const roles: Array<{
 ];
 
 function RoleIcon({ type }: { type: string }) {
+  if (type === "book") {
+    return (
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        fill="none"
+        className="h-4 w-4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      >
+        <path
+          d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v15H5.5A1.5 1.5 0 0 0 4 20.5v-15ZM20 5.5A1.5 1.5 0 0 0 18.5 4H13v15h5.5a1.5 1.5 0 0 1 1.5 1.5v-15Z"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
   if (type === "shield") {
     return (
       <svg
@@ -113,7 +137,7 @@ export function RoleSelector({
   return (
     <div
       aria-label="Choose account type"
-      className="grid grid-cols-3 rounded-xl border border-slate-200 bg-slate-50 p-1.5"
+      className="grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1.5 sm:grid-cols-4 sm:gap-0"
       role="tablist"
     >
       {roles.map((role) => {
